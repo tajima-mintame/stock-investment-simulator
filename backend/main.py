@@ -6,7 +6,6 @@ from fastapi.staticfiles import StaticFiles
 
 from config import FRONTEND_DIR
 from database import init_db
-from providers.finnhub import FinnhubProvider
 from providers.jquants import JQuantsProvider
 from routers import stocks
 
@@ -23,13 +22,12 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing database...")
     init_db()
 
-    # プロバイダーをルーターに注入
+    # プロバイダーをルーターに注入（米国株は将来対応予定）
     providers = {
         "JP": JQuantsProvider(),
-        "US": FinnhubProvider(),
     }
     stocks.set_providers(providers)
-    logger.info("Providers initialized: JP (J-Quants), US (Finnhub)")
+    logger.info("Providers initialized: JP (J-Quants)")
 
     yield
 

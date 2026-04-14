@@ -9,7 +9,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 # API Keys
 JQUANTS_API_KEY: str = os.getenv("JQUANTS_API_KEY", "")
-FINNHUB_API_KEY: str = os.getenv("FINNHUB_API_KEY", "")
+# FINNHUB_API_KEY は米国株対応時に追加予定
 
 # Database
 DB_PATH: str = os.getenv("DB_PATH", str(PROJECT_ROOT / "data" / "simulator.db"))

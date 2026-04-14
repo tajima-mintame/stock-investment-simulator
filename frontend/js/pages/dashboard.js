@@ -9,16 +9,10 @@ export async function renderDashboard(container) {
         <div class="card mb-1">
             <div class="card-title">Data Sync</div>
             <div class="sync-form">
+                <input type="hidden" id="sync-market" value="JP">
                 <label>
-                    Market
-                    <select id="sync-market">
-                        <option value="US">US</option>
-                        <option value="JP">JP</option>
-                    </select>
-                </label>
-                <label>
-                    Symbol
-                    <input id="sync-symbol" placeholder="AAPL, 7203..." size="10">
+                    銘柄コード
+                    <input id="sync-symbol" placeholder="7203, 9984..." size="10">
                 </label>
                 <label>
                     From
@@ -96,10 +90,8 @@ async function loadStockList() {
                     render: (row) =>
                         `<a href="#/stock/${row.market}/${row.symbol}" class="stock-link">${row.symbol}</a>`,
                 },
-                { key: "market", label: "Market" },
                 { key: "name", label: "Name" },
                 { key: "sector", label: "Sector" },
-                { key: "currency", label: "Currency" },
             ],
             rows: data.stocks,
             onRowClick: (row) => {
