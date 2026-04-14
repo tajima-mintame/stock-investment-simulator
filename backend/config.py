@@ -19,7 +19,7 @@ HOST: str = os.getenv("HOST", "127.0.0.1")
 PORT: int = int(os.getenv("PORT", "8000"))
 
 # Virtual account
-INITIAL_BALANCE: float = float(os.getenv("INITIAL_BALANCE", "10000000"))
+INITIAL_BALANCE: float = float(os.getenv("INITIAL_BALANCE", "100000"))
 
 # Frontend static files
 FRONTEND_DIR: str = str(PROJECT_ROOT / "frontend")

@@ -218,7 +218,7 @@ stock-investment-simulator/
 | カラム | 型 | 制約 | 説明 |
 |--------|-----|------|------|
 | id | INTEGER | PK, CHECK(id=1) | シングルトン制約 |
-| cash_balance | REAL | NOT NULL, DEFAULT 10000000 | 現金残高（JPY） |
+| cash_balance | REAL | NOT NULL, DEFAULT 100000 | 現金残高（JPY、初期10万円） |
 | created_at | TEXT | NOT NULL | 作成日時 |
 
 `CHECK (id = 1)` により、テーブルには常に1行のみ存在する。

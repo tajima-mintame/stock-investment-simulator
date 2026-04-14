@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS portfolio_holdings (
 
 CREATE TABLE IF NOT EXISTS account (
     id              INTEGER PRIMARY KEY CHECK (id = 1),
-    cash_balance    REAL NOT NULL DEFAULT 10000000,
+    cash_balance    REAL NOT NULL DEFAULT 100000,
     created_at      TEXT NOT NULL
 );
 
