@@ -6,10 +6,30 @@ import math
 from datetime import date
 
 
+def _validate_inputs(
+    dates: list[date], closes: list[float], period: int | None = None
+) -> bool:
+    """入力データを検証する。不正な場合は False を返す。"""
+    if len(dates) != len(closes):
+        return False
+    if len(dates) == 0:
+        return True  # 空は許容（空結果を返す）
+    if period is not None and period <= 0:
+        return False
+    # NaN/Inf チェック
+    for c in closes:
+        if math.isnan(c) or math.isinf(c):
+            return False
+    return True
+
+
 def calc_ma(
     dates: list[date], closes: list[float], period: int
 ) -> list[tuple[date, float | None]]:
     """単純移動平均線（SMA）を計算する。"""
+    if not _validate_inputs(dates, closes, period):
+        return [(d, None) for d in dates] if len(dates) <= len(closes) else []
+
     result: list[tuple[date, float | None]] = []
     for i in range(len(closes)):
         if i < period - 1:
@@ -24,6 +44,9 @@ def calc_rsi(
     dates: list[date], closes: list[float], period: int = 14
 ) -> list[tuple[date, float | None]]:
     """RSI（Wilder平滑化）を計算する。"""
+    if not _validate_inputs(dates, closes, period):
+        return [(d, None) for d in dates] if len(dates) <= len(closes) else []
+
     if len(closes) < period + 1:
         return [(d, None) for d in dates]
 
@@ -91,11 +114,14 @@ def _ema(values: list[float], period: int) -> list[float | None]:
 def calc_macd(
     dates: list[date],
     closes: list[float],
-    fast: int = 12,
+    fast: int = 12,  # noqa: A002
     slow: int = 26,
     signal_period: int = 9,
 ) -> list[tuple[date, float | None, float | None, float | None]]:
     """MACD（MACD線、シグナル線、ヒストグラム）を計算する。"""
+    if not _validate_inputs(dates, closes) or fast <= 0 or slow <= 0 or signal_period <= 0:
+        return [(d, None, None, None) for d in dates] if len(dates) <= len(closes) else []
+
     ema_fast = _ema(closes, fast)
     ema_slow = _ema(closes, slow)
 
@@ -134,8 +160,8 @@ def calc_bollinger(
     num_std: float = 2.0,
 ) -> list[tuple[date, float | None, float | None, float | None]]:
     """ボリンジャーバンド（上限、中央、下限）を計算する。"""
-    if period <= 0:
-        return [(d, None, None, None) for d in dates]
+    if not _validate_inputs(dates, closes, period):
+        return [(d, None, None, None) for d in dates] if len(dates) <= len(closes) else []
 
     result: list[tuple[date, float | None, float | None, float | None]] = []
 

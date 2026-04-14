@@ -12,6 +12,11 @@ def execute_trade(
     note: str | None = None,
 ) -> dict:
     """仮想取引を実行する。残高・保有を更新し、取引レコードを返す。"""
+    VALID_MARKETS = ("JP",)  # 米国株対応時に "US" を追加
+    if not symbol or not isinstance(symbol, str):
+        raise ValueError("symbol is required")
+    if market not in VALID_MARKETS:
+        raise ValueError(f"market must be one of {VALID_MARKETS}")
     if side not in ("BUY", "SELL"):
         raise ValueError("side must be BUY or SELL")
     if quantity <= 0:
