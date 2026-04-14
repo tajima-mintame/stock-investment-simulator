@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 
-from database import get_connection
+from database import get_db
 from models import (
     AccountInfo,
     TradeRecord,
@@ -15,8 +15,7 @@ router = APIRouter(prefix="/api", tags=["trades"])
 @router.get("/account", response_model=AccountInfo)
 async def account() -> AccountInfo:
     """口座情報（残高 + ポートフォリオ時価総額）を取得する。"""
-    info = get_account_info()
-    return AccountInfo(**info)
+    return AccountInfo(**get_account_info())
 
 
 @router.post("/trades", response_model=TradeRecord)
@@ -42,8 +41,7 @@ async def list_trades(
     market: str | None = Query(None),
 ) -> list[TradeRecord]:
     """取引履歴を取得する。"""
-    conn = get_connection()
-    try:
+    with get_db() as conn:
         query_parts = [
             "SELECT id, symbol, market, side, quantity, price, executed_at, note "
             "FROM trades WHERE 1=1"
@@ -71,12 +69,9 @@ async def list_trades(
             )
             for r in rows
         ]
-    finally:
-        conn.close()
 
 
 @router.get("/trades/stats", response_model=TradeStats)
 async def trade_stats() -> TradeStats:
     """損益統計を取得する。"""
-    stats = get_trade_stats()
-    return TradeStats(**stats)
+    return TradeStats(**get_trade_stats())

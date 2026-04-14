@@ -3,7 +3,8 @@
 import pytest
 from datetime import date, timedelta
 
-from database import get_connection
+from helpers import add_stock
+from database import get_db
 from services.simulation import (
     execute_trade,
     get_account_info,
@@ -15,31 +16,9 @@ from services.indicators import calc_ma, calc_rsi, calc_macd, calc_bollinger
 
 def _seed_multiple_stocks(test_db):
     """複数銘柄のテストデータを投入する。"""
-    conn = get_connection()
-    try:
-        stocks = [
-            ("7203", "トヨタ自動車", "輸送用機器", 2800.0),
-            ("9984", "ソフトバンクG", "情報・通信業", 6000.0),
-            ("6758", "ソニーG", "電気機器", 3200.0),
-        ]
-        for symbol, name, sector, base_price in stocks:
-            conn.execute(
-                "INSERT INTO stocks (symbol, market, name, sector, currency) "
-                "VALUES (?, 'JP', ?, ?, 'JPY')",
-                (symbol, name, sector),
-            )
-            for i in range(60):
-                d = (date(2025, 1, 1) + timedelta(days=i)).isoformat()
-                # 各銘柄で異なる値動き
-                close = base_price + i * 5 + ((-1) ** i) * 10
-                conn.execute(
-                    "INSERT INTO daily_prices (symbol, market, date, open, high, low, close, volume) "
-                    "VALUES (?, 'JP', ?, ?, ?, ?, ?, ?)",
-                    (symbol, d, close - 5, close + 15, close - 15, close, 500000 + i * 1000),
-                )
-        conn.commit()
-    finally:
-        conn.close()
+    add_stock("7203", name="トヨタ自動車", sector="輸送用機器", base_price=2800.0, days=60)
+    add_stock("9984", name="ソフトバンクG", sector="情報・通信業", base_price=6000.0, days=60)
+    add_stock("6758", name="ソニーG", sector="電気機器", base_price=3200.0, days=60)
 
 
 class TestFullTradeLifecycle:
@@ -48,13 +27,10 @@ class TestFullTradeLifecycle:
     def test_single_stock_lifecycle(self, seed_stock):
         """1銘柄: 指標確認 → 買い → 含み損益確認 → 売り → 損益確認"""
         # 1. 指標を計算（データが存在することの確認）
-        conn = get_connection()
-        try:
+        with get_db() as conn:
             rows = conn.execute(
                 "SELECT date, close FROM daily_prices WHERE symbol='7203' AND market='JP' ORDER BY date"
             ).fetchall()
-        finally:
-            conn.close()
 
         dates = [date.fromisoformat(r["date"]) for r in rows]
         closes = [r["close"] for r in rows]
@@ -171,13 +147,10 @@ class TestIndicatorsAfterTrade:
 
     def test_indicators_unchanged_by_trade(self, seed_stock):
         # 取引前の指標
-        conn = get_connection()
-        try:
+        with get_db() as conn:
             rows = conn.execute(
                 "SELECT date, close FROM daily_prices WHERE symbol='7203' AND market='JP' ORDER BY date"
             ).fetchall()
-        finally:
-            conn.close()
 
         dates = [date.fromisoformat(r["date"]) for r in rows]
         closes = [r["close"] for r in rows]

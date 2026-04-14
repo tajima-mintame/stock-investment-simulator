@@ -1,6 +1,5 @@
-from datetime import datetime, timezone
-
-from database import get_connection
+from config import SUPPORTED_MARKETS
+from database import get_db, utc_now_iso
 
 
 def execute_trade(
@@ -12,11 +11,10 @@ def execute_trade(
     note: str | None = None,
 ) -> dict:
     """仮想取引を実行する。残高・保有を更新し、取引レコードを返す。"""
-    VALID_MARKETS = ("JP",)  # 米国株対応時に "US" を追加
     if not symbol or not isinstance(symbol, str):
         raise ValueError("symbol is required")
-    if market not in VALID_MARKETS:
-        raise ValueError(f"market must be one of {VALID_MARKETS}")
+    if market not in SUPPORTED_MARKETS:
+        raise ValueError(f"market must be one of {SUPPORTED_MARKETS}")
     if side not in ("BUY", "SELL"):
         raise ValueError("side must be BUY or SELL")
     if quantity <= 0:
@@ -25,9 +23,7 @@ def execute_trade(
         raise ValueError("price must be positive")
 
     total_cost = price * quantity
-    conn = get_connection()
-    try:
-        # 銘柄の存在確認
+    with get_db() as conn:
         stock = conn.execute(
             "SELECT symbol FROM stocks WHERE symbol = ? AND market = ?",
             (symbol, market),
@@ -40,8 +36,7 @@ def execute_trade(
         else:
             _execute_sell(conn, symbol, market, quantity, price, total_cost)
 
-        # 取引記録
-        now = datetime.now(timezone.utc).isoformat()
+        now = utc_now_iso()
         cursor = conn.execute(
             "INSERT INTO trades (symbol, market, side, quantity, price, executed_at, note) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -59,8 +54,6 @@ def execute_trade(
             "executed_at": now,
             "note": note,
         }
-    finally:
-        conn.close()
 
 
 def _execute_buy(conn, symbol, market, quantity, price, total_cost):
@@ -130,108 +123,112 @@ def _execute_sell(conn, symbol, market, quantity, price, total_cost):
         )
 
 
+def _get_latest_price(conn, symbol: str, market: str) -> float | None:
+    """銘柄の最新終値を取得する。"""
+    row = conn.execute(
+        "SELECT close FROM daily_prices "
+        "WHERE symbol = ? AND market = ? ORDER BY date DESC LIMIT 1",
+        (symbol, market),
+    ).fetchone()
+    return row["close"] if row else None
+
+
 def get_account_info() -> dict:
     """口座情報（残高 + ポートフォリオ時価総額）を取得する。"""
-    conn = get_connection()
-    try:
+    with get_db() as conn:
         account = conn.execute("SELECT cash_balance FROM account WHERE id = 1").fetchone()
         cash = account["cash_balance"]
 
-        # ポートフォリオ時価総額 = Σ(保有数 × 最新終値)
         holdings = conn.execute(
-            "SELECT h.symbol, h.market, h.quantity "
-            "FROM portfolio_holdings h"
+            "SELECT symbol, market, quantity FROM portfolio_holdings"
         ).fetchall()
 
         portfolio_value = 0.0
         for h in holdings:
-            price_row = conn.execute(
-                "SELECT close FROM daily_prices "
-                "WHERE symbol = ? AND market = ? ORDER BY date DESC LIMIT 1",
-                (h["symbol"], h["market"]),
-            ).fetchone()
-            if price_row:
-                portfolio_value += h["quantity"] * price_row["close"]
+            price = _get_latest_price(conn, h["symbol"], h["market"])
+            if price is not None:
+                portfolio_value += h["quantity"] * price
 
         return {
             "cash_balance": cash,
             "portfolio_value": portfolio_value,
             "total_value": cash + portfolio_value,
         }
-    finally:
-        conn.close()
+
+
+def _calculate_fifo_pnls(trades) -> list[float]:
+    """FIFO方式で実現損益を計算する。"""
+    positions: dict[tuple[str, str], list[tuple[int, float]]] = {}
+    realized_pnls: list[float] = []
+
+    for t in trades:
+        key = (t["symbol"], t["market"])
+        if t["side"] == "BUY":
+            positions.setdefault(key, []).append((t["quantity"], t["price"]))
+        else:
+            remaining = t["quantity"]
+            sell_price = t["price"]
+            lots = positions.get(key, [])
+            pnl = 0.0
+
+            while remaining > 0 and lots:
+                lot_qty, lot_price = lots[0]
+                matched = min(remaining, lot_qty)
+                pnl += matched * (sell_price - lot_price)
+                remaining -= matched
+                if matched == lot_qty:
+                    lots.pop(0)
+                else:
+                    lots[0] = (lot_qty - matched, lot_price)
+
+            realized_pnls.append(pnl)
+
+    return realized_pnls
+
+
+def _compute_stats(total_trades: int, realized_pnls: list[float]) -> dict:
+    """実現損益リストから統計値を算出する。"""
+    gains = [p for p in realized_pnls if p > 0]
+    losses = [p for p in realized_pnls if p <= 0]
+    return {
+        "total_trades": total_trades,
+        "total_realized_pnl": sum(realized_pnls),
+        "win_count": len(gains),
+        "lose_count": len(losses),
+        "win_rate": len(gains) / len(realized_pnls) if realized_pnls else 0.0,
+        "avg_gain": sum(gains) / len(gains) if gains else 0.0,
+        "avg_loss": sum(losses) / len(losses) if losses else 0.0,
+    }
+
+
+_EMPTY_STATS = {
+    "total_trades": 0,
+    "total_realized_pnl": 0.0,
+    "win_count": 0,
+    "lose_count": 0,
+    "win_rate": 0.0,
+    "avg_gain": 0.0,
+    "avg_loss": 0.0,
+}
 
 
 def get_trade_stats() -> dict:
-    """損益統計を算出する。銘柄ごとの実現損益から勝率等を計算。"""
-    conn = get_connection()
-    try:
+    """損益統計を算出する。"""
+    with get_db() as conn:
         trades = conn.execute(
             "SELECT symbol, market, side, quantity, price "
             "FROM trades ORDER BY executed_at ASC"
         ).fetchall()
 
         if not trades:
-            return {
-                "total_trades": 0,
-                "total_realized_pnl": 0.0,
-                "win_count": 0,
-                "lose_count": 0,
-                "win_rate": 0.0,
-                "avg_gain": 0.0,
-                "avg_loss": 0.0,
-            }
+            return dict(_EMPTY_STATS)
 
-        # 銘柄ごとにFIFOで実現損益を計算
-        positions: dict[tuple[str, str], list[tuple[int, float]]] = {}
-        realized_pnls: list[float] = []
-
-        for t in trades:
-            key = (t["symbol"], t["market"])
-            if t["side"] == "BUY":
-                if key not in positions:
-                    positions[key] = []
-                positions[key].append((t["quantity"], t["price"]))
-            else:
-                # SELL: FIFOで取得単価と比較
-                remaining = t["quantity"]
-                sell_price = t["price"]
-                lots = positions.get(key, [])
-                pnl = 0.0
-
-                while remaining > 0 and lots:
-                    lot_qty, lot_price = lots[0]
-                    matched = min(remaining, lot_qty)
-                    pnl += matched * (sell_price - lot_price)
-                    remaining -= matched
-                    if matched == lot_qty:
-                        lots.pop(0)
-                    else:
-                        lots[0] = (lot_qty - matched, lot_price)
-
-                realized_pnls.append(pnl)
-
-        total_trades = len(trades)
-        gains = [p for p in realized_pnls if p > 0]
-        losses = [p for p in realized_pnls if p <= 0]
-
-        return {
-            "total_trades": total_trades,
-            "total_realized_pnl": sum(realized_pnls),
-            "win_count": len(gains),
-            "lose_count": len(losses),
-            "win_rate": len(gains) / len(realized_pnls) if realized_pnls else 0.0,
-            "avg_gain": sum(gains) / len(gains) if gains else 0.0,
-            "avg_loss": sum(losses) / len(losses) if losses else 0.0,
-        }
-    finally:
-        conn.close()
+        return _compute_stats(len(trades), _calculate_fifo_pnls(trades))
 
 
 def get_portfolio_holdings() -> list[dict]:
     """保有銘柄一覧（含み損益付き）を取得する。"""
-    conn = get_connection()
-    try:
+    with get_db() as conn:
         holdings = conn.execute(
             "SELECT h.symbol, h.market, h.quantity, h.avg_cost, s.name "
             "FROM portfolio_holdings h "
@@ -239,18 +236,11 @@ def get_portfolio_holdings() -> list[dict]:
         ).fetchall()
 
         result = []
-        total_unrealized = 0.0
         for h in holdings:
-            price_row = conn.execute(
-                "SELECT close FROM daily_prices "
-                "WHERE symbol = ? AND market = ? ORDER BY date DESC LIMIT 1",
-                (h["symbol"], h["market"]),
-            ).fetchone()
-            current_price = price_row["close"] if price_row else None
+            current_price = _get_latest_price(conn, h["symbol"], h["market"])
             unrealized = None
             if current_price is not None:
                 unrealized = (current_price - h["avg_cost"]) * h["quantity"]
-                total_unrealized += unrealized
 
             result.append({
                 "symbol": h["symbol"],
@@ -263,5 +253,3 @@ def get_portfolio_holdings() -> list[dict]:
             })
 
         return result
-    finally:
-        conn.close()

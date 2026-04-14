@@ -4,29 +4,10 @@ import math
 import pytest
 from datetime import date, timedelta
 
+from helpers import add_stock
+from database import get_db
 from services.indicators import calc_ma, calc_rsi, calc_macd, calc_bollinger
 from services.simulation import execute_trade, get_account_info, get_portfolio_holdings
-from database import get_connection
-
-
-def _add_stock(symbol, base_price=2800.0):
-    conn = get_connection()
-    try:
-        conn.execute(
-            "INSERT OR IGNORE INTO stocks (symbol, market, name, sector, currency) "
-            "VALUES (?, 'JP', ?, '輸送用機器', 'JPY')",
-            (symbol, f"Test-{symbol}"),
-        )
-        for i in range(30):
-            d = (date(2025, 1, 1) + timedelta(days=i)).isoformat()
-            conn.execute(
-                "INSERT OR IGNORE INTO daily_prices (symbol, market, date, open, high, low, close, volume) "
-                "VALUES (?, 'JP', ?, ?, ?, ?, ?, 500000)",
-                (symbol, d, base_price, base_price + 10, base_price - 10, base_price + i),
-            )
-        conn.commit()
-    finally:
-        conn.close()
 
 
 # === indicators エラー推測 ===
@@ -109,7 +90,7 @@ class TestSimulationErrorGuessing:
 
     def test_buy_same_stock_many_times(self, test_db):
         """同一銘柄を何度も買う → 加重平均が正しく更新される"""
-        _add_stock("7203")
+        add_stock("7203")
         for i in range(10):
             execute_trade("7203", "JP", "BUY", 1, 2800.0 + i * 10)
         holdings = get_portfolio_holdings()
@@ -119,7 +100,7 @@ class TestSimulationErrorGuessing:
 
     def test_sell_then_rebuy(self, test_db):
         """全売却後に再購入 → 新しい保有が作成される"""
-        _add_stock("7203")
+        add_stock("7203")
         execute_trade("7203", "JP", "BUY", 10, 2800.0)
         execute_trade("7203", "JP", "SELL", 10, 3000.0)
         assert len(get_portfolio_holdings()) == 0
@@ -132,7 +113,7 @@ class TestSimulationErrorGuessing:
 
     def test_floating_point_precision(self, test_db):
         """浮動小数点精度: 0.1 * 3 の丸め"""
-        _add_stock("7203")
+        add_stock("7203")
         execute_trade("7203", "JP", "BUY", 3, 0.1)
         info = get_account_info()
         # 100000 - 0.3 = 99999.7 (浮動小数点の精度内で)
@@ -140,7 +121,7 @@ class TestSimulationErrorGuessing:
 
     def test_very_small_trade(self, test_db):
         """最小取引: 1株 @ 0.01"""
-        _add_stock("7203")
+        add_stock("7203")
         execute_trade("7203", "JP", "BUY", 1, 0.01)
         holdings = get_portfolio_holdings()
         assert holdings[0]["quantity"] == 1
@@ -148,15 +129,12 @@ class TestSimulationErrorGuessing:
 
     def test_portfolio_without_price_data(self, test_db):
         """価格データなしの銘柄を保有"""
-        conn = get_connection()
-        try:
+        with get_db() as conn:
             conn.execute(
                 "INSERT INTO stocks (symbol, market, name, sector, currency) "
                 "VALUES ('NODATA', 'JP', 'No Data Corp', '不明', 'JPY')"
             )
             conn.commit()
-        finally:
-            conn.close()
 
         execute_trade("NODATA", "JP", "BUY", 10, 100.0)
         holdings = get_portfolio_holdings()

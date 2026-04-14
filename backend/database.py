@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -80,19 +81,29 @@ def get_connection() -> sqlite3.Connection:
     return conn
 
 
-def init_db() -> None:
-    """テーブル作成とアカウント初期化を実行する。"""
+@contextmanager
+def get_db():
+    """SQLite接続のコンテキストマネージャ。ブロック終了時に自動でcloseする。"""
     conn = get_connection()
     try:
-        conn.executescript(_SCHEMA)
-        # アカウントが未作成なら初期残高で作成
-        row = conn.execute("SELECT id FROM account WHERE id = 1").fetchone()
-        if row is None:
-            now = datetime.now(timezone.utc).isoformat()
-            conn.execute(
-                "INSERT INTO account (id, cash_balance, created_at) VALUES (1, ?, ?)",
-                (INITIAL_BALANCE, now),
-            )
-        conn.commit()
+        yield conn
     finally:
         conn.close()
+
+
+def utc_now_iso() -> str:
+    """現在時刻をUTC ISO8601形式で返す。"""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def init_db() -> None:
+    """テーブル作成とアカウント初期化を実行する。"""
+    with get_db() as conn:
+        conn.executescript(_SCHEMA)
+        row = conn.execute("SELECT id FROM account WHERE id = 1").fetchone()
+        if row is None:
+            conn.execute(
+                "INSERT INTO account (id, cash_balance, created_at) VALUES (1, ?, ?)",
+                (INITIAL_BALANCE, utc_now_iso()),
+            )
+        conn.commit()

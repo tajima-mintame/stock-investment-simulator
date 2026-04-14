@@ -1,30 +1,10 @@
 """デシジョンテーブルテスト: 条件の組み合わせを網羅的に検証する。"""
 
 import pytest
-from datetime import date, timedelta
 
-from database import get_connection
+from helpers import add_stock
+from database import get_db
 from services.simulation import execute_trade, get_account_info, get_portfolio_holdings
-
-
-def _add_stock(symbol, base_price=2800.0, days=30):
-    conn = get_connection()
-    try:
-        conn.execute(
-            "INSERT OR IGNORE INTO stocks (symbol, market, name, sector, currency) "
-            "VALUES (?, 'JP', ?, '輸送用機器', 'JPY')",
-            (symbol, f"Test-{symbol}"),
-        )
-        for i in range(days):
-            d = (date(2025, 1, 1) + timedelta(days=i)).isoformat()
-            conn.execute(
-                "INSERT OR IGNORE INTO daily_prices (symbol, market, date, open, high, low, close, volume) "
-                "VALUES (?, 'JP', ?, ?, ?, ?, ?, 500000)",
-                (symbol, d, base_price, base_price + 10, base_price - 10, base_price + i),
-            )
-        conn.commit()
-    finally:
-        conn.close()
 
 
 class TestExecuteTradeDecisionTable:
@@ -37,13 +17,13 @@ class TestExecuteTradeDecisionTable:
 
     def test_valid_buy_sufficient_balance(self, test_db):
         """銘柄○ × BUY × 数量○ × 価格○ × 残高○ → 成功"""
-        _add_stock("7203")
+        add_stock("7203")
         result = execute_trade("7203", "JP", "BUY", 10, 2800.0)
         assert result["side"] == "BUY"
 
     def test_valid_sell_sufficient_holdings(self, test_db):
         """銘柄○ × SELL × 数量○ × 価格○ × 保有○ → 成功"""
-        _add_stock("7203")
+        add_stock("7203")
         execute_trade("7203", "JP", "BUY", 10, 2800.0)
         result = execute_trade("7203", "JP", "SELL", 5, 3000.0)
         assert result["side"] == "SELL"
@@ -64,20 +44,20 @@ class TestExecuteTradeDecisionTable:
 
     def test_buy_insufficient_balance(self, test_db):
         """銘柄○ × BUY × 残高× → エラー"""
-        _add_stock("7203")
+        add_stock("7203")
         with pytest.raises(ValueError, match="Insufficient balance"):
             execute_trade("7203", "JP", "BUY", 100, 2800.0)  # 280,000 > 100,000
 
     def test_sell_insufficient_holdings(self, test_db):
         """銘柄○ × SELL × 保有× → エラー"""
-        _add_stock("7203")
+        add_stock("7203")
         execute_trade("7203", "JP", "BUY", 5, 2800.0)
         with pytest.raises(ValueError, match="Insufficient holdings"):
             execute_trade("7203", "JP", "SELL", 10, 3000.0)
 
     def test_sell_no_holdings(self, test_db):
         """銘柄○ × SELL × 保有0 → エラー"""
-        _add_stock("7203")
+        add_stock("7203")
         with pytest.raises(ValueError, match="Insufficient holdings"):
             execute_trade("7203", "JP", "SELL", 1, 3000.0)
 
@@ -85,31 +65,31 @@ class TestExecuteTradeDecisionTable:
 
     def test_buy_zero_quantity(self, test_db):
         """銘柄○ × BUY × 数量0 → エラー"""
-        _add_stock("7203")
+        add_stock("7203")
         with pytest.raises(ValueError, match="quantity must be positive"):
             execute_trade("7203", "JP", "BUY", 0, 2800.0)
 
     def test_buy_negative_quantity(self, test_db):
         """銘柄○ × BUY × 数量負 → エラー"""
-        _add_stock("7203")
+        add_stock("7203")
         with pytest.raises(ValueError, match="quantity must be positive"):
             execute_trade("7203", "JP", "BUY", -1, 2800.0)
 
     def test_sell_zero_quantity(self, test_db):
         """銘柄○ × SELL × 数量0 → エラー"""
-        _add_stock("7203")
+        add_stock("7203")
         with pytest.raises(ValueError, match="quantity must be positive"):
             execute_trade("7203", "JP", "SELL", 0, 3000.0)
 
     def test_buy_zero_price(self, test_db):
         """銘柄○ × BUY × 価格0 → エラー"""
-        _add_stock("7203")
+        add_stock("7203")
         with pytest.raises(ValueError, match="price must be positive"):
             execute_trade("7203", "JP", "BUY", 1, 0.0)
 
     def test_buy_negative_price(self, test_db):
         """銘柄○ × BUY × 価格負 → エラー"""
-        _add_stock("7203")
+        add_stock("7203")
         with pytest.raises(ValueError, match="price must be positive"):
             execute_trade("7203", "JP", "BUY", 1, -100.0)
 
@@ -117,13 +97,13 @@ class TestExecuteTradeDecisionTable:
 
     def test_invalid_side(self, test_db):
         """銘柄○ × 不正side → エラー"""
-        _add_stock("7203")
+        add_stock("7203")
         with pytest.raises(ValueError, match="side must be BUY or SELL"):
             execute_trade("7203", "JP", "HOLD", 1, 100.0)
 
     def test_empty_side(self, test_db):
         """銘柄○ × 空side → エラー"""
-        _add_stock("7203")
+        add_stock("7203")
         with pytest.raises(ValueError, match="side must be BUY or SELL"):
             execute_trade("7203", "JP", "", 1, 100.0)
 
@@ -135,8 +115,7 @@ class TestStocksFilterDecisionTable:
     """
 
     def _seed_stocks(self):
-        conn = get_connection()
-        try:
+        with get_db() as conn:
             stocks = [
                 ("7203", "JP", "トヨタ自動車", "輸送用機器"),
                 ("9984", "JP", "ソフトバンクG", "情報・通信業"),
@@ -149,8 +128,6 @@ class TestStocksFilterDecisionTable:
                     (sym, mkt, name, sector),
                 )
             conn.commit()
-        finally:
-            conn.close()
 
     def test_no_filters(self, app_client, test_db):
         """フィルタなし → 全件"""

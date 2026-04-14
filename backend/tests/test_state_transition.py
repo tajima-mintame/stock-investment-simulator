@@ -1,9 +1,8 @@
 """状態遷移テスト: ポートフォリオ・口座・保有の状態遷移を検証する。"""
 
 import pytest
-from datetime import date, timedelta
 
-from database import get_connection
+from helpers import add_stock
 from services.simulation import (
     execute_trade,
     get_account_info,
@@ -12,34 +11,12 @@ from services.simulation import (
 )
 
 
-def _add_stock(symbol, name, sector, base_price, days=30):
-    """テスト用銘柄と価格データを追加する。"""
-    conn = get_connection()
-    try:
-        conn.execute(
-            "INSERT OR IGNORE INTO stocks (symbol, market, name, sector, currency) "
-            "VALUES (?, 'JP', ?, ?, 'JPY')",
-            (symbol, name, sector),
-        )
-        for i in range(days):
-            d = (date(2025, 1, 1) + timedelta(days=i)).isoformat()
-            close = base_price + i * 5
-            conn.execute(
-                "INSERT OR IGNORE INTO daily_prices (symbol, market, date, open, high, low, close, volume) "
-                "VALUES (?, 'JP', ?, ?, ?, ?, ?, ?)",
-                (symbol, d, close - 5, close + 15, close - 10, close, 500000),
-            )
-        conn.commit()
-    finally:
-        conn.close()
-
-
 class TestPortfolioStateTransition:
     """ポートフォリオ状態: 空 → 1銘柄 → 2銘柄 → 部分売却 → 全売却 → 空"""
 
     def test_full_lifecycle(self, test_db):
-        _add_stock("7203", "トヨタ", "輸送用機器", 2800)
-        _add_stock("9984", "ソフトバンクG", "情報・通信業", 6000)
+        add_stock("7203", "トヨタ", "輸送用機器", 2800)
+        add_stock("9984", "ソフトバンクG", "情報・通信業", 6000)
 
         # 状態1: 空
         holdings = get_portfolio_holdings()
@@ -81,7 +58,7 @@ class TestAccountBalanceTransition:
     """口座残高状態: 初期 → 買い減算 → 買い減算 → 売り加算 → 全売却復帰"""
 
     def test_balance_through_operations(self, test_db):
-        _add_stock("7203", "トヨタ", "輸送用機器", 2800)
+        add_stock("7203", "トヨタ", "輸送用機器", 2800)
 
         initial = get_account_info()["cash_balance"]
         assert initial == pytest.approx(100000.0)
@@ -115,7 +92,7 @@ class TestTradeStatsTransition:
     """損益統計状態: 0件 → 買いのみ → 勝ち売り → 負け売り → 混合"""
 
     def test_stats_progression(self, test_db):
-        _add_stock("7203", "トヨタ", "輸送用機器", 2800)
+        add_stock("7203", "トヨタ", "輸送用機器", 2800)
 
         # 状態1: 取引なし
         stats = get_trade_stats()
@@ -150,9 +127,9 @@ class TestHoldingCountTransition:
     """保有銘柄数の遷移: 0 → 1 → 2 → 3 → 2 → 1 → 0"""
 
     def test_holding_count_sequence(self, test_db):
-        _add_stock("7203", "トヨタ", "輸送用機器", 2800)
-        _add_stock("9984", "ソフトバンクG", "情報・通信業", 6000)
-        _add_stock("6758", "ソニーG", "電気機器", 3200)
+        add_stock("7203", "トヨタ", "輸送用機器", 2800)
+        add_stock("9984", "ソフトバンクG", "情報・通信業", 6000)
+        add_stock("6758", "ソニーG", "電気機器", 3200)
 
         assert len(get_portfolio_holdings()) == 0
 
@@ -179,8 +156,8 @@ class TestTotalValueInvariant:
     """total_value = cash + portfolio_value が全操作で成立する不変条件"""
 
     def test_invariant_through_all_operations(self, test_db):
-        _add_stock("7203", "トヨタ", "輸送用機器", 2800)
-        _add_stock("9984", "ソフトバンクG", "情報・通信業", 6000)
+        add_stock("7203", "トヨタ", "輸送用機器", 2800)
+        add_stock("9984", "ソフトバンクG", "情報・通信業", 6000)
 
         def assert_total_invariant():
             info = get_account_info()

@@ -4,7 +4,8 @@ import math
 import pytest
 from datetime import date, timedelta
 
-from database import get_connection
+from helpers import add_stock
+from database import get_db
 from services.indicators import calc_ma, calc_rsi, calc_macd, calc_bollinger
 from services.simulation import (
     execute_trade,
@@ -12,27 +13,6 @@ from services.simulation import (
     get_portfolio_holdings,
     get_trade_stats,
 )
-
-
-def _add_stock(symbol, base_price=2800.0, days=30):
-    conn = get_connection()
-    try:
-        conn.execute(
-            "INSERT OR IGNORE INTO stocks (symbol, market, name, sector, currency) "
-            "VALUES (?, 'JP', ?, '輸送用機器', 'JPY')",
-            (symbol, f"Test-{symbol}"),
-        )
-        for i in range(days):
-            d = (date(2025, 1, 1) + timedelta(days=i)).isoformat()
-            close = base_price + i * 5
-            conn.execute(
-                "INSERT OR IGNORE INTO daily_prices (symbol, market, date, open, high, low, close, volume) "
-                "VALUES (?, 'JP', ?, ?, ?, ?, ?, 500000)",
-                (symbol, d, close - 5, close + 15, close - 10, close),
-            )
-        conn.commit()
-    finally:
-        conn.close()
 
 
 # ==========================================
@@ -97,13 +77,13 @@ class TestSimulationEquivalencePartition:
 
     def test_invalid_market(self, test_db):
         """無効なmarket → エラー"""
-        _add_stock("7203")
+        add_stock("7203")
         with pytest.raises(ValueError, match="market must be one of"):
             execute_trade("7203", "US", "BUY", 1, 100.0)
 
     def test_invalid_market_empty(self, test_db):
         """空のmarket → エラー"""
-        _add_stock("7203")
+        add_stock("7203")
         with pytest.raises(ValueError, match="market must be one of"):
             execute_trade("7203", "", "BUY", 1, 100.0)
 
@@ -119,13 +99,13 @@ class TestSimulationEquivalencePartition:
 
     def test_trade_with_note(self, test_db):
         """note付き取引 → noteが保存される"""
-        _add_stock("7203")
+        add_stock("7203")
         result = execute_trade("7203", "JP", "BUY", 1, 2800.0, note="テスト購入")
         assert result["note"] == "テスト購入"
 
     def test_trade_without_note(self, test_db):
         """note無し取引 → noteはNone"""
-        _add_stock("7203")
+        add_stock("7203")
         result = execute_trade("7203", "JP", "BUY", 1, 2800.0)
         assert result["note"] is None
 
@@ -170,7 +150,7 @@ class TestIndicatorCauseEffect:
 
     def test_sell_price_above_cost_positive_pnl(self, test_db):
         """売値 > 買値 → 実現損益プラス"""
-        _add_stock("7203")
+        add_stock("7203")
         execute_trade("7203", "JP", "BUY", 10, 2800.0)
         execute_trade("7203", "JP", "SELL", 10, 3000.0)
         stats = get_trade_stats()
@@ -178,7 +158,7 @@ class TestIndicatorCauseEffect:
 
     def test_sell_price_below_cost_negative_pnl(self, test_db):
         """売値 < 買値 → 実現損益マイナス"""
-        _add_stock("7203")
+        add_stock("7203")
         execute_trade("7203", "JP", "BUY", 10, 3000.0)
         execute_trade("7203", "JP", "SELL", 10, 2800.0)
         stats = get_trade_stats()
@@ -186,7 +166,7 @@ class TestIndicatorCauseEffect:
 
     def test_sell_price_equals_cost_zero_pnl(self, test_db):
         """売値 = 買値 → 実現損益ゼロ"""
-        _add_stock("7203")
+        add_stock("7203")
         execute_trade("7203", "JP", "BUY", 10, 2800.0)
         execute_trade("7203", "JP", "SELL", 10, 2800.0)
         stats = get_trade_stats()
@@ -194,15 +174,12 @@ class TestIndicatorCauseEffect:
 
     def test_no_price_data_unrealized_pnl_none(self, test_db):
         """価格データなし → 含み損益はNone"""
-        conn = get_connection()
-        try:
+        with get_db() as conn:
             conn.execute(
                 "INSERT INTO stocks (symbol, market, name, sector, currency) "
                 "VALUES ('NOPR', 'JP', 'No Price', '不明', 'JPY')"
             )
             conn.commit()
-        finally:
-            conn.close()
         execute_trade("NOPR", "JP", "BUY", 10, 100.0)
         holdings = get_portfolio_holdings()
         assert holdings[0]["current_price"] is None
@@ -210,8 +187,8 @@ class TestIndicatorCauseEffect:
 
     def test_multiple_stocks_aggregated_portfolio(self, test_db):
         """複数銘柄 → ポートフォリオに全て含まれる"""
-        _add_stock("7203", 2800)
-        _add_stock("9984", 6000)
+        add_stock("7203", 2800)
+        add_stock("9984", 6000)
         execute_trade("7203", "JP", "BUY", 5, 2800.0)
         execute_trade("9984", "JP", "BUY", 2, 6000.0)
         holdings = get_portfolio_holdings()
@@ -317,20 +294,16 @@ class TestPortfolioEquivalenceComplete:
 
     def test_unrealized_pnl_zero(self, test_db):
         """含み損益ゼロ: 買値 = 最新価格"""
-        conn = get_connection()
-        try:
+        with get_db() as conn:
             conn.execute(
                 "INSERT INTO stocks (symbol, market, name, sector, currency) "
                 "VALUES ('ZERO', 'JP', 'Zero PnL Corp', '不明', 'JPY')"
             )
-            # 最新closeが500.0になるようにデータ作成
             conn.execute(
                 "INSERT INTO daily_prices (symbol, market, date, open, high, low, close, volume) "
                 "VALUES ('ZERO', 'JP', '2025-01-01', 500, 510, 490, 500, 100000)"
             )
             conn.commit()
-        finally:
-            conn.close()
 
         execute_trade("ZERO", "JP", "BUY", 10, 500.0)
         holdings = get_portfolio_holdings()
@@ -339,22 +312,22 @@ class TestPortfolioEquivalenceComplete:
 
     def test_unrealized_pnl_positive(self, test_db):
         """含み益: 買値 < 最新価格"""
-        _add_stock("7203", 2800)  # 最新close = 2800 + 29*5 = 2945
+        add_stock("7203", 2800)  # 最新close = 2800 + 29*5 = 2945
         execute_trade("7203", "JP", "BUY", 10, 2800.0)
         holdings = get_portfolio_holdings()
         assert holdings[0]["unrealized_pnl"] > 0
 
     def test_unrealized_pnl_negative(self, test_db):
         """含み損: 買値 > 最新価格"""
-        _add_stock("7203", 2800)  # 最新close = 2945
+        add_stock("7203", 2800)  # 最新close = 2945
         execute_trade("7203", "JP", "BUY", 10, 5000.0)
         holdings = get_portfolio_holdings()
         assert holdings[0]["unrealized_pnl"] < 0
 
     def test_mixed_profit_loss(self, test_db):
         """複数銘柄: 利益+損失の混在"""
-        _add_stock("7203", 2800)  # 最新close = 2945
-        _add_stock("9984", 6000)  # 最新close = 6145
+        add_stock("7203", 2800)  # 最新close = 2945
+        add_stock("9984", 6000)  # 最新close = 6145
 
         execute_trade("7203", "JP", "BUY", 10, 2800.0)  # 含み益
         execute_trade("9984", "JP", "BUY", 5, 9000.0)   # 含み損

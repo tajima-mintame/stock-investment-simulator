@@ -1,8 +1,8 @@
-from datetime import date, datetime, timezone
+from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query
 
-from database import get_connection
+from database import get_db, utc_now_iso
 from models import (
     OHLCV,
     BollingerBandValue,
@@ -43,8 +43,7 @@ async def list_stocks(
     q: str | None = Query(None),
 ) -> StockListResponse:
     """登録済み銘柄の一覧を取得する。"""
-    conn = get_connection()
-    try:
+    with get_db() as conn:
         query_parts = ["SELECT symbol, market, name, sector, currency FROM stocks WHERE 1=1"]
         params: list = []
         if market:
@@ -70,8 +69,6 @@ async def list_stocks(
             for r in rows
         ]
         return StockListResponse(stocks=stocks, total=len(stocks))
-    finally:
-        conn.close()
 
 
 @router.get("/search")
@@ -97,8 +94,7 @@ async def search_stocks(
 @router.get("/{market}/{symbol}", response_model=StockDetail)
 async def get_stock_detail(market: str, symbol: str) -> StockDetail:
     """銘柄詳細（プロフィール + 最新価格）を取得する。"""
-    conn = get_connection()
-    try:
+    with get_db() as conn:
         row = conn.execute(
             "SELECT symbol, market, name, sector, currency FROM stocks WHERE symbol = ? AND market = ?",
             (symbol, market),
@@ -145,8 +141,6 @@ async def get_stock_detail(market: str, symbol: str) -> StockDetail:
             )
 
         return StockDetail(info=info, latest_price=latest_price)
-    finally:
-        conn.close()
 
 
 @router.get("/{market}/{symbol}/prices", response_model=PriceListResponse)
@@ -157,8 +151,7 @@ async def get_prices(
     to_date: date | None = Query(None, alias="to"),
 ) -> PriceListResponse:
     """日足OHLCVを取得する。"""
-    conn = get_connection()
-    try:
+    with get_db() as conn:
         query_parts = [
             "SELECT date, open, high, low, close, volume FROM daily_prices "
             "WHERE symbol = ? AND market = ?"
@@ -186,8 +179,6 @@ async def get_prices(
             for r in rows
         ]
         return PriceListResponse(symbol=symbol, market=market, prices=prices)
-    finally:
-        conn.close()
 
 
 @router.get("/{market}/{symbol}/indicators", response_model=IndicatorsResponse)
@@ -198,8 +189,7 @@ async def get_indicators(
     period: int = Query(20),
 ) -> IndicatorsResponse:
     """テクニカル指標を計算して返す。"""
-    conn = get_connection()
-    try:
+    with get_db() as conn:
         rows = conn.execute(
             "SELECT date, close FROM daily_prices "
             "WHERE symbol = ? AND market = ? ORDER BY date ASC",
@@ -242,8 +232,6 @@ async def get_indicators(
             ]
 
         return result
-    finally:
-        conn.close()
 
 
 @router.post("/sync", response_model=SyncResponse)
@@ -256,67 +244,47 @@ async def sync_stock(req: SyncRequest) -> SyncResponse:
     if stock_data is None:
         raise HTTPException(status_code=404, detail="Stock not found in external API")
 
-    conn = get_connection()
-    try:
-        now = datetime.now(timezone.utc).isoformat()
-        conn.execute(
-            "INSERT OR REPLACE INTO stocks (symbol, market, name, sector, currency, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (
-                stock_data.symbol,
-                stock_data.market,
-                stock_data.name,
-                stock_data.sector,
-                stock_data.currency,
-                now,
-            ),
-        )
-
-        # 日足データ取得
-        start = req.from_date or date(2024, 1, 1)
-        end = req.to_date or date.today()
-        prices = await provider.get_daily_prices(req.symbol, start, end)
-
-        for p in prices:
+    with get_db() as conn:
+        now = utc_now_iso()
+        try:
             conn.execute(
-                "INSERT OR REPLACE INTO daily_prices "
-                "(symbol, market, date, open, high, low, close, volume, adj_close) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    req.symbol,
-                    req.market,
-                    p.date.isoformat(),
-                    p.open,
-                    p.high,
-                    p.low,
-                    p.close,
-                    p.volume,
-                    p.adj_close,
-                ),
+                "INSERT OR REPLACE INTO stocks (symbol, market, name, sector, currency, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (stock_data.symbol, stock_data.market, stock_data.name,
+                 stock_data.sector, stock_data.currency, now),
             )
 
-        # 収集ログ記録
-        conn.execute(
-            "INSERT INTO collection_log (market, symbol, fetched_at, status, message) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (req.market, req.symbol, now, "OK", f"Fetched {len(prices)} records"),
-        )
-        conn.commit()
+            start = req.from_date or date(2024, 1, 1)
+            end = req.to_date or date.today()
+            prices = await provider.get_daily_prices(req.symbol, start, end)
 
-        return SyncResponse(
-            symbol=req.symbol,
-            market=req.market,
-            fetched_count=len(prices),
-            message=f"Successfully synced {len(prices)} daily prices",
-        )
-    except Exception as e:
-        now = datetime.now(timezone.utc).isoformat()
-        conn.execute(
-            "INSERT INTO collection_log (market, symbol, fetched_at, status, message) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (req.market, req.symbol, now, "ERROR", str(e)),
-        )
-        conn.commit()
-        raise HTTPException(status_code=500, detail="Failed to sync stock data") from e
-    finally:
-        conn.close()
+            for p in prices:
+                conn.execute(
+                    "INSERT OR REPLACE INTO daily_prices "
+                    "(symbol, market, date, open, high, low, close, volume, adj_close) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (req.symbol, req.market, p.date.isoformat(),
+                     p.open, p.high, p.low, p.close, p.volume, p.adj_close),
+                )
+
+            conn.execute(
+                "INSERT INTO collection_log (market, symbol, fetched_at, status, message) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (req.market, req.symbol, now, "OK", f"Fetched {len(prices)} records"),
+            )
+            conn.commit()
+
+            return SyncResponse(
+                symbol=req.symbol,
+                market=req.market,
+                fetched_count=len(prices),
+                message=f"Successfully synced {len(prices)} daily prices",
+            )
+        except Exception as e:
+            conn.execute(
+                "INSERT INTO collection_log (market, symbol, fetched_at, status, message) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (req.market, req.symbol, utc_now_iso(), "ERROR", str(e)),
+            )
+            conn.commit()
+            raise HTTPException(status_code=500, detail="Failed to sync stock data") from e

@@ -21,5 +21,8 @@ PORT: int = int(os.getenv("PORT", "8000"))
 # Virtual account
 INITIAL_BALANCE: float = float(os.getenv("INITIAL_BALANCE", "100000"))
 
+# Supported markets (米国株対応時に "US" を追加)
+SUPPORTED_MARKETS: tuple[str, ...] = ("JP",)
+
 # Frontend static files
 FRONTEND_DIR: str = str(PROJECT_ROOT / "frontend")
