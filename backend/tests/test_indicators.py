@@ -131,5 +131,120 @@ class TestCalcBollinger:
                 assert l == pytest.approx(100.0)
 
 
+class TestBoundaryMA:
+    """MA の境界値テスト"""
+
+    def test_data_exactly_period(self):
+        """データ数 = period → 最後の1つだけ値あり"""
+        dates, closes = _make_data(5)
+        result = calc_ma(dates, closes, 5)
+        for i in range(4):
+            assert result[i][1] is None
+        assert result[4][1] == pytest.approx(102.0)
+
+    def test_data_one_less_than_period(self):
+        """データ数 = period - 1 → 全てNone"""
+        dates, closes = _make_data(4)
+        result = calc_ma(dates, closes, 5)
+        for _, v in result:
+            assert v is None
+
+    def test_data_one(self):
+        """データ1件、period=1 → 値あり"""
+        dates, closes = _make_data(1)
+        result = calc_ma(dates, closes, 1)
+        assert result[0][1] == pytest.approx(100.0)
+
+    def test_empty_data(self):
+        """データ0件"""
+        result = calc_ma([], [], 5)
+        assert result == []
+
+
+class TestBoundaryRSI:
+    """RSI の境界値テスト"""
+
+    def test_data_exactly_period_plus_one(self):
+        """データ数 = period + 1 → RSI値1つだけ"""
+        dates, closes = _make_data(15, step=1.0)  # 15 = 14 + 1
+        result = calc_rsi(dates, closes, 14)
+        non_none = [(d, v) for d, v in result if v is not None]
+        assert len(non_none) == 1
+
+    def test_data_exactly_period(self):
+        """データ数 = period → RSI値なし（全てNone）"""
+        dates, closes = _make_data(14)
+        result = calc_rsi(dates, closes, 14)
+        for _, v in result:
+            assert v is None
+
+    def test_data_one(self):
+        """データ1件 → 全てNone"""
+        dates, closes = _make_data(1)
+        result = calc_rsi(dates, closes, 14)
+        assert len(result) == 1
+        assert result[0][1] is None
+
+    def test_empty_data(self):
+        """データ0件"""
+        result = calc_rsi([], [], 14)
+        assert result == []
+
+
+class TestBoundaryMACD:
+    """MACD の境界値テスト"""
+
+    def test_data_exactly_slow_period(self):
+        """データ数 = slow(26) → MACD値1つだけ"""
+        dates, closes = _make_data(26)
+        result = calc_macd(dates, closes, 12, 26, 9)
+        macd_values = [m for _, m, _, _ in result if m is not None]
+        assert len(macd_values) == 1
+
+    def test_data_one_less_than_slow(self):
+        """データ数 = slow - 1 → MACD値なし"""
+        dates, closes = _make_data(25)
+        result = calc_macd(dates, closes, 12, 26, 9)
+        macd_values = [m for _, m, _, _ in result if m is not None]
+        assert len(macd_values) == 0
+
+    def test_empty_data(self):
+        """データ0件"""
+        result = calc_macd([], [], 12, 26, 9)
+        assert result == []
+
+
+class TestBoundaryBollinger:
+    """ボリンジャーバンドの境界値テスト"""
+
+    def test_data_exactly_period(self):
+        """データ数 = period → 最後の1つだけ値あり"""
+        dates, closes = _make_data(20)
+        result = calc_bollinger(dates, closes, 20, 2.0)
+        non_none = [(d, u, m, l) for d, u, m, l in result if u is not None]
+        assert len(non_none) == 1
+
+    def test_data_one_less_than_period(self):
+        """データ数 = period - 1 → 全てNone"""
+        dates, closes = _make_data(19)
+        result = calc_bollinger(dates, closes, 20, 2.0)
+        for _, u, m, l in result:
+            assert u is None
+
+    def test_data_one(self):
+        """データ1件"""
+        dates, closes = _make_data(1)
+        result = calc_bollinger(dates, closes, 1, 2.0)
+        # period=1 → std=0 → upper=middle=lower=close
+        assert result[0][1] == pytest.approx(100.0)
+        assert result[0][2] == pytest.approx(100.0)
+        assert result[0][3] == pytest.approx(100.0)
+
+    def test_empty_data(self):
+        """データ0件"""
+        result = calc_bollinger([], [], 20, 2.0)
+        assert result == []
+
+
 # pytest.approx を import
 import pytest
