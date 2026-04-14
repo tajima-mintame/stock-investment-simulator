@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from config import FRONTEND_DIR
 from database import init_db
 from providers.jquants import JQuantsProvider
-from routers import stocks
+from routers import stocks, trades, portfolio
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,6 +43,8 @@ app = FastAPI(
 
 # ルーター登録
 app.include_router(stocks.router)
+app.include_router(trades.router)
+app.include_router(portfolio.router)
 
 
 # ヘルスチェック

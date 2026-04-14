@@ -6,6 +6,21 @@ export async function renderDashboard(container) {
     container.innerHTML = `
         <h2 style="margin-bottom: 1rem;">Dashboard</h2>
 
+        <div class="grid grid-3 mb-1" id="account-summary">
+            <div class="card">
+                <div class="card-title">Cash</div>
+                <div class="card-value" id="dash-cash">-</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Portfolio</div>
+                <div class="card-value" id="dash-portfolio">-</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Total</div>
+                <div class="card-value" id="dash-total">-</div>
+            </div>
+        </div>
+
         <div class="card mb-1">
             <div class="card-title">Data Sync</div>
             <div class="sync-form">
@@ -40,8 +55,8 @@ export async function renderDashboard(container) {
     // Sync button handler
     document.getElementById("sync-btn").addEventListener("click", handleSync);
 
-    // Load stock list
-    await loadStockList();
+    // Load account summary and stock list
+    await Promise.all([loadAccountSummary(), loadStockList()]);
 }
 
 async function handleSync() {
@@ -70,6 +85,17 @@ async function handleSync() {
     } finally {
         btn.disabled = false;
         btn.textContent = "Sync";
+    }
+}
+
+async function loadAccountSummary() {
+    try {
+        const info = await api.getAccount();
+        document.getElementById("dash-cash").textContent = formatNumber(info.cash_balance);
+        document.getElementById("dash-portfolio").textContent = formatNumber(info.portfolio_value);
+        document.getElementById("dash-total").textContent = formatNumber(info.total_value);
+    } catch (e) {
+        // Account not loaded — leave defaults
     }
 }
 

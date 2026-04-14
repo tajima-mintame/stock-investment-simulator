@@ -11,6 +11,12 @@ export async function renderStockDetail(container, market, symbol) {
         <div id="stock-info" class="card mb-1">
             <div class="loading">Loading stock info...</div>
         </div>
+        <div id="trade-buttons" class="card mb-1" style="display:none;">
+            <div style="display: flex; gap: 0.5rem;">
+                <button id="btn-buy" class="btn-buy" style="flex:1;">Buy</button>
+                <button id="btn-sell" class="btn-sell" style="flex:1;">Sell</button>
+            </div>
+        </div>
         <div class="chart-container" id="price-chart"></div>
         <div class="mt-1" id="price-table-container"></div>
     `;
@@ -40,6 +46,17 @@ export async function renderStockDetail(container, market, symbol) {
                 </div>
             </div>
         `;
+
+        // Show trade buttons
+        const tradeButtons = document.getElementById("trade-buttons");
+        tradeButtons.style.display = "block";
+        const latestPrice = lp ? lp.close : "";
+        document.getElementById("btn-buy").addEventListener("click", () => {
+            location.hash = `#/trading?symbol=${symbol}&price=${latestPrice}`;
+        });
+        document.getElementById("btn-sell").addEventListener("click", () => {
+            location.hash = `#/trading?symbol=${symbol}&price=${latestPrice}`;
+        });
     } catch (e) {
         document.getElementById("stock-info").innerHTML =
             `<div class="message message-error">${e.message}</div>`;
