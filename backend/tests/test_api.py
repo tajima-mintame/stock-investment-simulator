@@ -112,6 +112,83 @@ class TestPortfolio:
         assert data["holdings"][0]["quantity"] == 10
 
 
+class TestTradesSell:
+    """SELL操作のAPI検証"""
+
+    def test_sell_success(self, app_client, seed_stock):
+        app_client.post(
+            "/api/trades",
+            json={"symbol": "7203", "market": "JP", "side": "BUY", "quantity": 10, "price": 2850.0},
+        )
+        resp = app_client.post(
+            "/api/trades",
+            json={"symbol": "7203", "market": "JP", "side": "SELL", "quantity": 5, "price": 3000.0},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["side"] == "SELL"
+        assert resp.json()["quantity"] == 5
+
+    def test_sell_insufficient(self, app_client, seed_stock):
+        resp = app_client.post(
+            "/api/trades",
+            json={"symbol": "7203", "market": "JP", "side": "SELL", "quantity": 1, "price": 3000.0},
+        )
+        assert resp.status_code == 400
+
+    def test_sell_all_clears_portfolio(self, app_client, seed_stock):
+        app_client.post(
+            "/api/trades",
+            json={"symbol": "7203", "market": "JP", "side": "BUY", "quantity": 10, "price": 2850.0},
+        )
+        app_client.post(
+            "/api/trades",
+            json={"symbol": "7203", "market": "JP", "side": "SELL", "quantity": 10, "price": 3000.0},
+        )
+        resp = app_client.get("/api/portfolio")
+        assert resp.json()["holdings"] == []
+
+    def test_stats_after_win_trade(self, app_client, seed_stock):
+        app_client.post(
+            "/api/trades",
+            json={"symbol": "7203", "market": "JP", "side": "BUY", "quantity": 10, "price": 2800.0},
+        )
+        app_client.post(
+            "/api/trades",
+            json={"symbol": "7203", "market": "JP", "side": "SELL", "quantity": 10, "price": 3000.0},
+        )
+        resp = app_client.get("/api/trades/stats")
+        data = resp.json()
+        assert data["total_realized_pnl"] == pytest.approx(2000.0)
+        assert data["win_rate"] == pytest.approx(1.0)
+
+
+class TestPortfolioStates:
+    """ポートフォリオの利益/損失/ゼロ状態"""
+
+    def test_portfolio_unrealized_profit(self, app_client, seed_stock):
+        """含み益: 買値 < 現在価格"""
+        app_client.post(
+            "/api/trades",
+            json={"symbol": "7203", "market": "JP", "side": "BUY", "quantity": 10, "price": 2800.0},
+        )
+        resp = app_client.get("/api/portfolio")
+        data = resp.json()
+        # 最新close = 2800 + 29*10 + 5 = 3095, avg_cost = 2800
+        assert data["holdings"][0]["unrealized_pnl"] > 0
+        assert data["total_unrealized_pnl"] > 0
+
+    def test_portfolio_unrealized_loss(self, app_client, seed_stock):
+        """含み損: 買値 > 現在価格"""
+        app_client.post(
+            "/api/trades",
+            json={"symbol": "7203", "market": "JP", "side": "BUY", "quantity": 10, "price": 9000.0},
+        )
+        resp = app_client.get("/api/portfolio")
+        data = resp.json()
+        assert data["holdings"][0]["unrealized_pnl"] < 0
+        assert data["total_unrealized_pnl"] < 0
+
+
 class TestIndicators:
     def test_indicators_with_data(self, app_client, seed_stock):
         resp = app_client.get(

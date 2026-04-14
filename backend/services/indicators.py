@@ -134,6 +134,9 @@ def calc_bollinger(
     num_std: float = 2.0,
 ) -> list[tuple[date, float | None, float | None, float | None]]:
     """ボリンジャーバンド（上限、中央、下限）を計算する。"""
+    if period <= 0:
+        return [(d, None, None, None) for d in dates]
+
     result: list[tuple[date, float | None, float | None, float | None]] = []
 
     for i in range(len(closes)):
