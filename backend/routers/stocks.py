@@ -5,6 +5,10 @@ from fastapi import APIRouter, HTTPException, Query
 from database import get_connection
 from models import (
     OHLCV,
+    BollingerBandValue,
+    IndicatorsResponse,
+    IndicatorValue,
+    MACDValue,
     PriceListResponse,
     StockDetail,
     StockInfo,
@@ -13,6 +17,7 @@ from models import (
     SyncResponse,
 )
 from providers.base import MarketDataProvider
+from services.indicators import calc_bollinger, calc_ma, calc_macd, calc_rsi
 
 router = APIRouter(prefix="/api/stocks", tags=["stocks"])
 
@@ -181,6 +186,62 @@ async def get_prices(
             for r in rows
         ]
         return PriceListResponse(symbol=symbol, market=market, prices=prices)
+    finally:
+        conn.close()
+
+
+@router.get("/{market}/{symbol}/indicators", response_model=IndicatorsResponse)
+async def get_indicators(
+    market: str,
+    symbol: str,
+    type: str = Query("ma,rsi,macd,bb", alias="type"),
+    period: int = Query(20),
+) -> IndicatorsResponse:
+    """テクニカル指標を計算して返す。"""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT date, close FROM daily_prices "
+            "WHERE symbol = ? AND market = ? ORDER BY date ASC",
+            (symbol, market),
+        ).fetchall()
+
+        if not rows:
+            return IndicatorsResponse(symbol=symbol, market=market)
+
+        dates = [date.fromisoformat(r["date"]) for r in rows]
+        closes = [r["close"] for r in rows]
+        requested = set(type.split(","))
+
+        result = IndicatorsResponse(symbol=symbol, market=market)
+
+        if "ma" in requested:
+            result.ma = {}
+            for p in [5, 25, 75]:
+                ma_data = calc_ma(dates, closes, p)
+                result.ma[str(p)] = [
+                    IndicatorValue(date=d, value=v) for d, v in ma_data
+                ]
+
+        if "rsi" in requested:
+            rsi_data = calc_rsi(dates, closes, 14)
+            result.rsi = [IndicatorValue(date=d, value=v) for d, v in rsi_data]
+
+        if "macd" in requested:
+            macd_data = calc_macd(dates, closes, 12, 26, 9)
+            result.macd = [
+                MACDValue(date=d, macd=m, signal=s, histogram=h)
+                for d, m, s, h in macd_data
+            ]
+
+        if "bb" in requested:
+            bb_data = calc_bollinger(dates, closes, period, 2.0)
+            result.bollinger = [
+                BollingerBandValue(date=d, upper=u, middle=m, lower=l)
+                for d, u, m, l in bb_data
+            ]
+
+        return result
     finally:
         conn.close()
 

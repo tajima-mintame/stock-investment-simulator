@@ -1,5 +1,11 @@
 import { api } from "../api.js";
-import { createCandlestickChart } from "../components/chart.js";
+import {
+    createCandlestickChart,
+    addMAOverlay,
+    addBBOverlay,
+    createRSIChart,
+    createMACDChart,
+} from "../components/chart.js";
 import { formatNumber } from "../components/table.js";
 
 export async function renderStockDetail(container, market, symbol) {
@@ -17,16 +23,26 @@ export async function renderStockDetail(container, market, symbol) {
                 <button id="btn-sell" class="btn-sell" style="flex:1;">Sell</button>
             </div>
         </div>
+        <div class="card mb-1" id="indicator-toggles">
+            <div class="card-title">Indicators</div>
+            <div style="display:flex; gap:1rem; flex-wrap:wrap; font-size:0.875rem;">
+                <label><input type="checkbox" id="chk-ma" checked> MA (5/25/75)</label>
+                <label><input type="checkbox" id="chk-bb"> Bollinger Bands</label>
+                <label><input type="checkbox" id="chk-rsi"> RSI</label>
+                <label><input type="checkbox" id="chk-macd"> MACD</label>
+            </div>
+        </div>
         <div class="chart-container" id="price-chart"></div>
-        <div class="mt-1" id="price-table-container"></div>
+        <div id="rsi-chart" style="margin-top:0.25rem;"></div>
+        <div id="macd-chart" style="margin-top:0.25rem;"></div>
     `;
 
     // Load stock info
     try {
         const detail = await api.getStockDetail(market, symbol);
         const info = detail.info;
-        const titleEl = document.getElementById("stock-title");
-        titleEl.textContent = `${info.name || symbol} (${market}:${symbol})`;
+        document.getElementById("stock-title").textContent =
+            `${info.name || symbol} (${market}:${symbol})`;
 
         const infoEl = document.getElementById("stock-info");
         const lp = detail.latest_price;
@@ -47,7 +63,7 @@ export async function renderStockDetail(container, market, symbol) {
             </div>
         `;
 
-        // Show trade buttons
+        // Trade buttons
         const tradeButtons = document.getElementById("trade-buttons");
         tradeButtons.style.display = "block";
         const latestPrice = lp ? lp.close : "";
@@ -62,17 +78,87 @@ export async function renderStockDetail(container, market, symbol) {
             `<div class="message message-error">${e.message}</div>`;
     }
 
-    // Load chart
+    // Load chart + indicators
     try {
         const priceData = await api.getPrices(market, symbol);
         const chartEl = document.getElementById("price-chart");
 
         if (priceData.prices.length === 0) {
             chartEl.innerHTML = `<div class="empty-state">No price data available. Sync this stock first.</div>`;
+            document.getElementById("indicator-toggles").style.display = "none";
             return;
         }
 
-        createCandlestickChart(chartEl, priceData.prices);
+        const { chart } = createCandlestickChart(chartEl, priceData.prices);
+
+        // Load indicators
+        let indicators = null;
+        try {
+            indicators = await api.getIndicators(market, symbol, "ma,rsi,macd,bb");
+        } catch (e) {
+            // Indicators failed, chart still works
+        }
+
+        if (!indicators) return;
+
+        // State for overlay series (to remove/add on toggle)
+        let maSeries = null;
+        let bbSeries = null;
+        let rsiChart = null;
+        let macdChart = null;
+
+        function updateOverlays() {
+            const showMA = document.getElementById("chk-ma").checked;
+            const showBB = document.getElementById("chk-bb").checked;
+            const showRSI = document.getElementById("chk-rsi").checked;
+            const showMACD = document.getElementById("chk-macd").checked;
+
+            // MA
+            if (showMA && !maSeries && indicators.ma) {
+                maSeries = addMAOverlay(chart, indicators.ma);
+            } else if (!showMA && maSeries) {
+                for (const s of Object.values(maSeries)) {
+                    chart.removeSeries(s);
+                }
+                maSeries = null;
+            }
+
+            // Bollinger Bands
+            if (showBB && !bbSeries && indicators.bollinger) {
+                bbSeries = addBBOverlay(chart, indicators.bollinger);
+            } else if (!showBB && bbSeries) {
+                chart.removeSeries(bbSeries.upper);
+                chart.removeSeries(bbSeries.middle);
+                chart.removeSeries(bbSeries.lower);
+                bbSeries = null;
+            }
+
+            // RSI
+            const rsiEl = document.getElementById("rsi-chart");
+            if (showRSI && !rsiChart && indicators.rsi) {
+                rsiChart = createRSIChart(rsiEl, indicators.rsi);
+            } else if (!showRSI && rsiChart) {
+                rsiEl.innerHTML = "";
+                rsiChart = null;
+            }
+
+            // MACD
+            const macdEl = document.getElementById("macd-chart");
+            if (showMACD && !macdChart && indicators.macd) {
+                macdChart = createMACDChart(macdEl, indicators.macd);
+            } else if (!showMACD && macdChart) {
+                macdEl.innerHTML = "";
+                macdChart = null;
+            }
+        }
+
+        // Initial render
+        updateOverlays();
+
+        // Toggle listeners
+        for (const id of ["chk-ma", "chk-bb", "chk-rsi", "chk-macd"]) {
+            document.getElementById(id).addEventListener("change", updateOverlays);
+        }
     } catch (e) {
         document.getElementById("price-chart").innerHTML =
             `<div class="message message-error">${e.message}</div>`;
