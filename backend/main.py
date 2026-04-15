@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from config import FRONTEND_DIR
 from database import init_db
 from providers.jquants import JQuantsProvider
-from routers import stocks, trades, portfolio
+from routers import stocks, trades, portfolio, screening
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,6 +45,7 @@ app = FastAPI(
 app.include_router(stocks.router)
 app.include_router(trades.router)
 app.include_router(portfolio.router)
+app.include_router(screening.router)
 
 
 # ヘルスチェック

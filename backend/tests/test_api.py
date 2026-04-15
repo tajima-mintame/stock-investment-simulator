@@ -212,3 +212,52 @@ class TestIndicators:
         assert resp.status_code == 200
         data = resp.json()
         assert data["ma"] is None
+
+
+class TestScreening:
+    def test_screening_empty(self, app_client):
+        resp = app_client.get("/api/screening")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_screening_with_data(self, app_client, seed_stock):
+        resp = app_client.get("/api/screening?market=JP")
+        assert resp.status_code == 200
+        results = resp.json()
+        assert len(results) == 1
+        assert results[0]["symbol"] == "7203"
+        assert "avg_volume" in results[0]
+        assert "volatility" in results[0]
+
+    def test_screening_sort(self, app_client, seed_stock):
+        resp = app_client.get("/api/screening?sort_by=volatility")
+        assert resp.status_code == 200
+
+
+class TestAllocation:
+    def test_allocation_empty(self, app_client):
+        resp = app_client.get("/api/portfolio/allocation")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["by_market"] == []
+        assert data["by_sector"] == []
+
+    def test_allocation_with_holdings(self, app_client, seed_stock):
+        app_client.post(
+            "/api/trades",
+            json={"symbol": "7203", "market": "JP", "side": "BUY", "quantity": 10, "price": 2800.0},
+        )
+        resp = app_client.get("/api/portfolio/allocation")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["by_market"]) == 1
+        assert len(data["by_sector"]) == 1
+        assert data["by_sector"][0]["percentage"] == pytest.approx(1.0)
+
+
+class TestCorrelation:
+    def test_correlation_empty(self, app_client):
+        resp = app_client.get("/api/portfolio/correlation")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["matrix"] == []
