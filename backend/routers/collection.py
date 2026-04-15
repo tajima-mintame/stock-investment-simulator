@@ -18,7 +18,8 @@ async def collection_status(limit: int = Query(20)) -> list[dict]:
     with get_db() as conn:
         rows = conn.execute(
             "SELECT id, market, symbol, fetched_at, status, message "
-            "FROM collection_log ORDER BY fetched_at DESC LIMIT ?",
+            "FROM collection_log WHERE status != 'FUNDAMENTAL' "
+            "ORDER BY fetched_at DESC LIMIT ?",
             (limit,),
         ).fetchall()
         return [dict(r) for r in rows]

@@ -168,6 +168,12 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 table {
     width: 100%;
     border-collapse: collapse;
+    table-layout: auto;
+}
+
+.card table {
+    overflow-x: auto;
+    display: block;
 }
 
 th, td {
@@ -175,6 +181,12 @@ th, td {
     text-align: left;
     border-bottom: 1px solid var(--border);
     font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+td.wrap {
+    white-space: normal;
+    word-break: break-all;
 }
 
 th {
