@@ -173,7 +173,7 @@ table {
 
 .card table {
     overflow-x: auto;
-    display: block;
+    display: table;
 }
 
 th, td {
@@ -181,12 +181,6 @@ th, td {
     text-align: left;
     border-bottom: 1px solid var(--border);
     font-size: 0.875rem;
-    white-space: nowrap;
-}
-
-td.wrap {
-    white-space: normal;
-    word-break: break-all;
 }
 
 th {
