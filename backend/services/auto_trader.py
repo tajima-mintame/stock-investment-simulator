@@ -36,8 +36,10 @@ async def setup_stocks(provider, count: int = 20) -> dict:
 
     registered = 0
     errors = 0
-    end = date.today()
-    start = end - timedelta(days=90)  # 直近90日分
+
+    # J-Quants無料プランの日付制限に対応: 利用可能範囲内で直近データを取得
+    end = min(date.today(), date(2026, 1, 21))  # 無料プラン上限
+    start = end - timedelta(days=90)
 
     from providers.jquants import _from_jquants_code
 
@@ -58,6 +60,10 @@ async def setup_stocks(provider, count: int = 20) -> dict:
                     (symbol, name, sector, utc_now_iso()),
                 )
                 conn.commit()
+
+            # レート制限対策: リクエスト間に待機
+            import asyncio
+            await asyncio.sleep(0.5)
 
             # 日足データ同期
             prices = await provider.get_daily_prices(symbol, start, end)
