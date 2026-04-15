@@ -34,9 +34,9 @@ export function renderTable(container, { columns, rows, onRowClick }) {
                 td.textContent = row[col.key] ?? "-";
             }
             if (col.align === "right") td.style.textAlign = "right";
-            tbody.appendChild(td);
+            tr.appendChild(td);
         });
-        table.appendChild(tr);
+        tbody.appendChild(tr);
     });
     table.appendChild(tbody);
 

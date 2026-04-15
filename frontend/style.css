@@ -171,9 +171,10 @@ table {
     table-layout: auto;
 }
 
-.card table {
-    overflow-x: auto;
-    display: table;
+.card > table,
+.card > div > table {
+    width: 100%;
+    table-layout: fixed;
 }
 
 th, td {
