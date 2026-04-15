@@ -433,6 +433,56 @@ def _safe_float(v) -> float | None:
         return None
 
 
+def get_rankings(sort_by: str = "score", limit: int = 10) -> list[dict]:
+    """全登録銘柄のスコアランキングを返す。"""
+    with get_db() as conn:
+        stocks = conn.execute(
+            "SELECT symbol, market, name, sector FROM stocks WHERE watched = 1"
+        ).fetchall()
+
+    if not stocks:
+        return []
+
+    rankings = []
+    for s in stocks:
+        result = _score_stock(s["symbol"], s["market"])
+        if result.get("action") == "SKIP" and result.get("reason") == "データ不足":
+            continue
+        result["name"] = s["name"]
+        result["sector"] = s["sector"]
+        rankings.append(result)
+
+    key_map = {
+        "score": lambda r: r.get("score", 0),
+        "tech_score": lambda r: r.get("tech_score", 0),
+        "fund_score": lambda r: r.get("fund_score", 0),
+    }
+    key_fn = key_map.get(sort_by, key_map["score"])
+    rankings.sort(key=key_fn, reverse=True)
+
+    return rankings[:limit]
+
+
+def toggle_auto_trade(enabled: bool, provider=None) -> dict:
+    """自動取引のON/OFFを切り替える。ONで即時セットアップ+実行。"""
+    if not enabled:
+        # OFF: ウォッチリスト全解除
+        with get_db() as conn:
+            conn.execute("UPDATE stocks SET watched = 0")
+            conn.commit()
+        return {"enabled": False, "message": "自動取引を停止しました"}
+
+    # ON: 既にウォッチ銘柄があればそのまま実行、なければ返すだけ
+    with get_db() as conn:
+        count = conn.execute("SELECT COUNT(*) FROM stocks WHERE watched = 1").fetchone()[0]
+
+    if count == 0:
+        return {"enabled": True, "message": "銘柄が未登録です。自動売買画面からセットアップしてください", "need_setup": True}
+
+    result = run_strategy()
+    return {"enabled": True, "message": f"実行完了: 買い{result['buys']}件 / 売り{result['sells']}件", "run": result}
+
+
 def get_auto_trade_results() -> dict:
     """自動売買の結果を集計する。"""
     with get_db() as conn:

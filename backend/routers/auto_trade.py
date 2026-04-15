@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query
 
-from services.auto_trader import setup_stocks, run_strategy, get_auto_trade_results
+from services.auto_trader import setup_stocks, run_strategy, get_auto_trade_results, get_rankings, toggle_auto_trade
 
 router = APIRouter(prefix="/api/auto-trade", tags=["auto-trade"])
 
@@ -38,6 +38,22 @@ async def start(count: int = Query(20)) -> dict:
         "setup": setup_result,
         "run": run_result,
     }
+
+
+@router.get("/rankings")
+async def rankings(
+    sort_by: str = Query("score"),
+    limit: int = Query(10),
+) -> list[dict]:
+    """銘柄スコアランキングを取得する。"""
+    return get_rankings(sort_by=sort_by, limit=limit)
+
+
+@router.post("/toggle")
+async def toggle(enabled: bool = Query(...)) -> dict:
+    """自動取引のON/OFFを切り替える。"""
+    provider = _providers.get("JP")
+    return toggle_auto_trade(enabled, provider)
 
 
 @router.get("/results")

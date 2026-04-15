@@ -113,6 +113,14 @@ export const api = {
         return request("/auto-trade/results");
     },
 
+    autoTradeRankings(sortBy = "score", limit = 10) {
+        return request(`/auto-trade/rankings?sort_by=${sortBy}&limit=${limit}`);
+    },
+
+    autoTradeToggle(enabled) {
+        return request(`/auto-trade/toggle?enabled=${enabled}`, { method: "POST" });
+    },
+
     // Collection
     getCollectionStatus(limit = 10) {
         return request(`/collection/status?limit=${limit}`);

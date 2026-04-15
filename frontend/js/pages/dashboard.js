@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { renderTable, formatNumber } from "../components/table.js";
+import { renderTable, formatNumber, colorBySign } from "../components/table.js";
 
 export async function renderDashboard(container) {
     container.innerHTML = `
@@ -17,6 +17,28 @@ export async function renderDashboard(container) {
             <div class="card">
                 <div class="card-title">合計</div>
                 <div class="card-value" id="dash-total">-</div>
+            </div>
+        </div>
+
+        <div class="card mb-1">
+            <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+                <span>自動取引</span>
+                <button id="auto-toggle" class="btn-sell" style="font-size:0.8rem; padding:0.3rem 1rem;">OFF</button>
+            </div>
+            <div id="auto-message" style="font-size:0.85rem; color:var(--text-muted); margin-top:0.5rem;"></div>
+        </div>
+
+        <div class="card mb-1">
+            <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+                <span>高評価銘柄ランキング</span>
+                <div style="display:flex; gap:0.25rem;" id="ranking-tabs">
+                    <button class="btn-primary ranking-tab active" data-sort="score" style="font-size:0.75rem; padding:0.25rem 0.5rem;">総合</button>
+                    <button class="ranking-tab" data-sort="fund_score" style="font-size:0.75rem; padding:0.25rem 0.5rem; background:var(--bg-input); color:var(--text); border:none; border-radius:var(--radius); cursor:pointer;">ファンダ</button>
+                    <button class="ranking-tab" data-sort="tech_score" style="font-size:0.75rem; padding:0.25rem 0.5rem; background:var(--bg-input); color:var(--text); border:none; border-radius:var(--radius); cursor:pointer;">テクニカル</button>
+                </div>
+            </div>
+            <div id="ranking-table">
+                <div class="empty-state" style="font-size:0.85rem;">銘柄が登録されていません。自動売買画面からセットアップしてください。</div>
             </div>
         </div>
 
@@ -60,9 +82,136 @@ export async function renderDashboard(container) {
 
     document.getElementById("sync-btn").addEventListener("click", handleSync);
     document.getElementById("collect-btn").addEventListener("click", handleCollect);
+    document.getElementById("auto-toggle").addEventListener("click", handleAutoToggle);
 
-    await Promise.all([loadAccountSummary(), loadStockList(), loadCollectionStatus()]);
+    // ランキングタブ
+    document.querySelectorAll(".ranking-tab").forEach((tab) => {
+        tab.addEventListener("click", (e) => {
+            document.querySelectorAll(".ranking-tab").forEach((t) => {
+                t.classList.remove("active", "btn-primary");
+                t.style.background = "var(--bg-input)";
+                t.style.color = "var(--text)";
+            });
+            e.target.classList.add("active", "btn-primary");
+            e.target.style.background = "";
+            e.target.style.color = "";
+            loadRankings(e.target.dataset.sort);
+        });
+    });
+
+    await Promise.all([loadAccountSummary(), loadRankings("score"), loadStockList(), loadCollectionStatus()]);
 }
+
+// === 自動取引トグル ===
+
+let autoEnabled = false;
+
+async function handleAutoToggle() {
+    const btn = document.getElementById("auto-toggle");
+    const msgEl = document.getElementById("auto-message");
+    const newState = !autoEnabled;
+
+    btn.disabled = true;
+    btn.textContent = "処理中...";
+    msgEl.innerHTML = "";
+
+    try {
+        const result = await api.autoTradeToggle(newState);
+        autoEnabled = newState;
+        updateToggleButton();
+        msgEl.innerHTML = result.message;
+
+        if (result.need_setup) {
+            msgEl.innerHTML += ` <a href="#/auto-trade" class="stock-link">セットアップへ</a>`;
+        }
+
+        await Promise.all([loadAccountSummary(), loadRankings("score")]);
+    } catch (e) {
+        msgEl.innerHTML = `<span class="text-red">${e.message}</span>`;
+    } finally {
+        btn.disabled = false;
+        updateToggleButton();
+    }
+}
+
+function updateToggleButton() {
+    const btn = document.getElementById("auto-toggle");
+    if (autoEnabled) {
+        btn.textContent = "ON";
+        btn.className = "btn-buy";
+        btn.style.fontSize = "0.8rem";
+        btn.style.padding = "0.3rem 1rem";
+    } else {
+        btn.textContent = "OFF";
+        btn.className = "btn-sell";
+        btn.style.fontSize = "0.8rem";
+        btn.style.padding = "0.3rem 1rem";
+    }
+}
+
+// === ランキング ===
+
+async function loadRankings(sortBy) {
+    const el = document.getElementById("ranking-table");
+    try {
+        const rankings = await api.autoTradeRankings(sortBy, 10);
+
+        if (rankings.length === 0) {
+            el.innerHTML = `<div class="empty-state" style="font-size:0.85rem;">銘柄が登録されていません。自動売買画面からセットアップしてください。</div>`;
+            return;
+        }
+
+        renderTable(el, {
+            columns: [
+                {
+                    key: "symbol",
+                    label: "コード",
+                    render: (r) => `<a href="#/stock/JP/${r.symbol}" class="stock-link">${r.symbol}</a>`,
+                },
+                { key: "name", label: "銘柄名" },
+                {
+                    key: "score",
+                    label: "総合",
+                    align: "right",
+                    render: (r) => r.score != null ? colorBySign(r.score, r.score.toFixed(0)) : "-",
+                },
+                {
+                    key: "tech_score",
+                    label: "テクニカル",
+                    align: "right",
+                    render: (r) => r.tech_score != null ? colorBySign(r.tech_score, r.tech_score.toFixed(0)) : "-",
+                },
+                {
+                    key: "fund_score",
+                    label: "ファンダ",
+                    align: "right",
+                    render: (r) => r.fund_score != null ? colorBySign(r.fund_score, r.fund_score.toFixed(0)) : "-",
+                },
+                {
+                    key: "price",
+                    label: "株価",
+                    align: "right",
+                    render: (r) => r.price ? formatNumber(r.price, 1) : "-",
+                },
+                {
+                    key: "action",
+                    label: "判断",
+                    render: (r) => {
+                        const cls = r.action === "BUY" ? "text-green" : r.action === "SELL" ? "text-red" : "text-muted";
+                        const label = {BUY: "買い", SELL: "売り", HOLD: "様子見", SKIP: "-"}[r.action] || r.action;
+                        return `<span class="${cls}">${label}</span>`;
+                    },
+                },
+            ],
+            rows: rankings,
+            onRowClick: (r) => { location.hash = `#/stock/JP/${r.symbol}`; },
+        });
+    } catch (e) {
+        el.innerHTML = `<div class="text-muted" style="font-size:0.85rem;">ランキングを読み込めませんでした</div>`;
+    }
+}
+
+// === 既存機能 ===
 
 async function handleSync() {
     const btn = document.getElementById("sync-btn");
@@ -128,7 +277,7 @@ async function loadCollectionStatus() {
     try {
         const logs = await api.getCollectionStatus(5);
         if (logs.length === 0) {
-            el.innerHTML = `<div class="text-muted" style="font-size:0.85rem;">収集ログはまだありません。銘柄を追加してウォッチリストに設定してください。</div>`;
+            el.innerHTML = `<div class="text-muted" style="font-size:0.85rem;">収集ログはまだありません。</div>`;
             return;
         }
         let html = '<table style="font-size:0.85rem;">';
