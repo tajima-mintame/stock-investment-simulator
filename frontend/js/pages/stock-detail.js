@@ -11,23 +11,23 @@ import { formatNumber } from "../components/table.js";
 export async function renderStockDetail(container, market, symbol) {
     container.innerHTML = `
         <div style="display:flex; align-items:center; gap:1rem; margin-bottom:1rem;">
-            <a href="#/" style="color:var(--text-muted); text-decoration:none;">&larr; Back</a>
+            <a href="#/" style="color:var(--text-muted); text-decoration:none;">&larr; 戻る</a>
             <h2 id="stock-title">${market}:${symbol}</h2>
         </div>
         <div id="stock-info" class="card mb-1">
-            <div class="loading">Loading stock info...</div>
+            <div class="loading">読み込み中...</div>
         </div>
         <div id="trade-buttons" class="card mb-1" style="display:none;">
             <div style="display: flex; gap: 0.5rem;">
-                <button id="btn-buy" class="btn-buy" style="flex:1;">Buy</button>
-                <button id="btn-sell" class="btn-sell" style="flex:1;">Sell</button>
+                <button id="btn-buy" class="btn-buy" style="flex:1;">買い</button>
+                <button id="btn-sell" class="btn-sell" style="flex:1;">売り</button>
             </div>
         </div>
         <div class="card mb-1" id="indicator-toggles">
-            <div class="card-title">Indicators</div>
+            <div class="card-title">テクニカル指標</div>
             <div style="display:flex; gap:1rem; flex-wrap:wrap; font-size:0.875rem;">
-                <label><input type="checkbox" id="chk-ma" checked> MA (5/25/75)</label>
-                <label><input type="checkbox" id="chk-bb"> Bollinger Bands</label>
+                <label><input type="checkbox" id="chk-ma" checked> 移動平均線 (5/25/75)</label>
+                <label><input type="checkbox" id="chk-bb"> ボリンジャーバンド</label>
                 <label><input type="checkbox" id="chk-rsi"> RSI</label>
                 <label><input type="checkbox" id="chk-macd"> MACD</label>
             </div>
@@ -37,7 +37,7 @@ export async function renderStockDetail(container, market, symbol) {
         <div id="macd-chart" style="margin-top:0.25rem;"></div>
     `;
 
-    // Load stock info
+    // 銘柄情報読み込み
     try {
         const detail = await api.getStockDetail(market, symbol);
         const info = detail.info;
@@ -49,21 +49,21 @@ export async function renderStockDetail(container, market, symbol) {
         infoEl.innerHTML = `
             <div class="grid grid-3">
                 <div>
-                    <div class="card-title">Sector</div>
+                    <div class="card-title">セクター</div>
                     <div>${info.sector || "-"}</div>
                 </div>
                 <div>
-                    <div class="card-title">Currency</div>
+                    <div class="card-title">通貨</div>
                     <div>${info.currency}</div>
                 </div>
                 <div>
-                    <div class="card-title">Latest Close</div>
+                    <div class="card-title">最新終値</div>
                     <div class="card-value">${lp ? formatNumber(lp.close, 2) : "-"}</div>
                 </div>
             </div>
         `;
 
-        // Trade buttons
+        // 売買ボタン
         const tradeButtons = document.getElementById("trade-buttons");
         tradeButtons.style.display = "block";
         const latestPrice = lp ? lp.close : "";
@@ -78,30 +78,28 @@ export async function renderStockDetail(container, market, symbol) {
             `<div class="message message-error">${e.message}</div>`;
     }
 
-    // Load chart + indicators
+    // チャート + 指標
     try {
         const priceData = await api.getPrices(market, symbol);
         const chartEl = document.getElementById("price-chart");
 
         if (priceData.prices.length === 0) {
-            chartEl.innerHTML = `<div class="empty-state">No price data available. Sync this stock first.</div>`;
+            chartEl.innerHTML = `<div class="empty-state">価格データがありません。先に銘柄を同期してください。</div>`;
             document.getElementById("indicator-toggles").style.display = "none";
             return;
         }
 
         const { chart } = createCandlestickChart(chartEl, priceData.prices);
 
-        // Load indicators
         let indicators = null;
         try {
             indicators = await api.getIndicators(market, symbol, "ma,rsi,macd,bb");
         } catch (e) {
-            // Indicators failed, chart still works
+            // 指標取得失敗してもチャートは表示
         }
 
         if (!indicators) return;
 
-        // State for overlay series (to remove/add on toggle)
         let maSeries = null;
         let bbSeries = null;
         let rsiChart = null;
@@ -113,17 +111,13 @@ export async function renderStockDetail(container, market, symbol) {
             const showRSI = document.getElementById("chk-rsi").checked;
             const showMACD = document.getElementById("chk-macd").checked;
 
-            // MA
             if (showMA && !maSeries && indicators.ma) {
                 maSeries = addMAOverlay(chart, indicators.ma);
             } else if (!showMA && maSeries) {
-                for (const s of Object.values(maSeries)) {
-                    chart.removeSeries(s);
-                }
+                for (const s of Object.values(maSeries)) chart.removeSeries(s);
                 maSeries = null;
             }
 
-            // Bollinger Bands
             if (showBB && !bbSeries && indicators.bollinger) {
                 bbSeries = addBBOverlay(chart, indicators.bollinger);
             } else if (!showBB && bbSeries) {
@@ -133,7 +127,6 @@ export async function renderStockDetail(container, market, symbol) {
                 bbSeries = null;
             }
 
-            // RSI
             const rsiEl = document.getElementById("rsi-chart");
             if (showRSI && !rsiChart && indicators.rsi) {
                 rsiChart = createRSIChart(rsiEl, indicators.rsi);
@@ -142,7 +135,6 @@ export async function renderStockDetail(container, market, symbol) {
                 rsiChart = null;
             }
 
-            // MACD
             const macdEl = document.getElementById("macd-chart");
             if (showMACD && !macdChart && indicators.macd) {
                 macdChart = createMACDChart(macdEl, indicators.macd);
@@ -152,10 +144,7 @@ export async function renderStockDetail(container, market, symbol) {
             }
         }
 
-        // Initial render
         updateOverlays();
-
-        // Toggle listeners
         for (const id of ["chk-ma", "chk-bb", "chk-rsi", "chk-macd"]) {
             document.getElementById(id).addEventListener("change", updateOverlays);
         }

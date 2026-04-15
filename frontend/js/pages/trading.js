@@ -3,15 +3,15 @@ import { renderTable, formatNumber, colorBySign } from "../components/table.js";
 
 export async function renderTrading(container) {
     container.innerHTML = `
-        <h2 style="margin-bottom: 1rem;">Trading</h2>
+        <h2 style="margin-bottom: 1rem;">取引</h2>
 
         <div class="grid grid-2 mb-1">
             <div class="card" id="account-card">
-                <div class="card-title">Account</div>
-                <div class="loading">Loading...</div>
+                <div class="card-title">口座情報</div>
+                <div class="loading">読み込み中...</div>
             </div>
             <div class="card">
-                <div class="card-title">New Trade</div>
+                <div class="card-title">新規注文</div>
                 <div class="sync-form" style="flex-direction: column; align-items: stretch;">
                     <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                         <label>
@@ -28,8 +28,8 @@ export async function renderTrading(container) {
                         </label>
                     </div>
                     <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                        <button id="buy-btn" class="btn-buy" style="flex:1;">Buy</button>
-                        <button id="sell-btn" class="btn-sell" style="flex:1;">Sell</button>
+                        <button id="buy-btn" class="btn-buy" style="flex:1;">買い</button>
+                        <button id="sell-btn" class="btn-sell" style="flex:1;">売り</button>
                     </div>
                 </div>
                 <div id="trade-message" style="margin-top: 0.5rem;"></div>
@@ -37,18 +37,18 @@ export async function renderTrading(container) {
         </div>
 
         <div class="grid grid-3 mb-1" id="stats-cards">
-            <div class="card"><div class="card-title">Total P&L</div><div class="card-value" id="stat-pnl">-</div></div>
-            <div class="card"><div class="card-title">Win Rate</div><div class="card-value" id="stat-winrate">-</div></div>
-            <div class="card"><div class="card-title">Trades</div><div class="card-value" id="stat-trades">-</div></div>
+            <div class="card"><div class="card-title">実現損益</div><div class="card-value" id="stat-pnl">-</div></div>
+            <div class="card"><div class="card-title">勝率</div><div class="card-value" id="stat-winrate">-</div></div>
+            <div class="card"><div class="card-title">取引回数</div><div class="card-value" id="stat-trades">-</div></div>
         </div>
 
         <div class="card">
-            <div class="card-title">Trade History</div>
+            <div class="card-title">取引履歴</div>
             <div id="trade-history"></div>
         </div>
     `;
 
-    // Parse URL params for pre-filled values
+    // URLパラメータからプリセット
     const urlParams = new URLSearchParams(location.hash.split("?")[1] || "");
     if (urlParams.get("symbol")) {
         document.getElementById("trade-symbol").value = urlParams.get("symbol");
@@ -70,7 +70,7 @@ async function handleTrade(side) {
     const msgEl = document.getElementById("trade-message");
 
     if (!symbol || !quantity || !price) {
-        msgEl.innerHTML = `<div class="message message-error">All fields are required</div>`;
+        msgEl.innerHTML = `<div class="message message-error">全項目を入力してください</div>`;
         return;
     }
 
@@ -88,8 +88,8 @@ async function handleTrade(side) {
             quantity,
             price,
         });
-        const action = side === "BUY" ? "Bought" : "Sold";
-        msgEl.innerHTML = `<div class="message message-success">${action} ${quantity} x ${symbol} @ ${formatNumber(price, 1)}</div>`;
+        const action = side === "BUY" ? "買い" : "売り";
+        msgEl.innerHTML = `<div class="message message-success">${action} ${quantity}株 x ${symbol} @ ${formatNumber(price, 1)}</div>`;
         await Promise.all([loadAccount(), loadStats(), loadHistory()]);
     } catch (e) {
         msgEl.innerHTML = `<div class="message message-error">${e.message}</div>`;
@@ -104,22 +104,22 @@ async function loadAccount() {
     try {
         const info = await api.getAccount();
         el.innerHTML = `
-            <div class="card-title">Account</div>
+            <div class="card-title">口座情報</div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                <span class="text-muted">Cash</span>
+                <span class="text-muted">現金残高</span>
                 <span>${formatNumber(info.cash_balance)}</span>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                <span class="text-muted">Portfolio</span>
+                <span class="text-muted">ポートフォリオ</span>
                 <span>${formatNumber(info.portfolio_value)}</span>
             </div>
             <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border); padding-top: 0.5rem;">
-                <span>Total</span>
+                <span>合計</span>
                 <span class="card-value" style="font-size: 1.2rem;">${formatNumber(info.total_value)}</span>
             </div>
         `;
     } catch (e) {
-        el.innerHTML = `<div class="card-title">Account</div><div class="text-muted">${e.message}</div>`;
+        el.innerHTML = `<div class="card-title">口座情報</div><div class="text-muted">${e.message}</div>`;
     }
 }
 
@@ -146,7 +146,7 @@ async function loadHistory() {
     try {
         const trades = await api.listTrades();
         if (trades.length === 0) {
-            el.innerHTML = `<div class="empty-state">No trades yet.</div>`;
+            el.innerHTML = `<div class="empty-state">取引履歴はまだありません。</div>`;
             return;
         }
 
@@ -154,31 +154,31 @@ async function loadHistory() {
             columns: [
                 {
                     key: "executed_at",
-                    label: "Date",
+                    label: "日付",
                     render: (r) => r.executed_at.slice(0, 10),
                 },
                 {
                     key: "symbol",
-                    label: "Symbol",
+                    label: "銘柄",
                     render: (r) =>
                         `<a href="#/stock/${r.market}/${r.symbol}" class="stock-link">${r.symbol}</a>`,
                 },
                 {
                     key: "side",
-                    label: "Side",
+                    label: "売買",
                     render: (r) =>
-                        `<span class="${r.side === "BUY" ? "text-green" : "text-red"}">${r.side}</span>`,
+                        `<span class="${r.side === "BUY" ? "text-green" : "text-red"}">${r.side === "BUY" ? "買い" : "売り"}</span>`,
                 },
-                { key: "quantity", label: "Qty", align: "right" },
+                { key: "quantity", label: "数量", align: "right" },
                 {
                     key: "price",
-                    label: "Price",
+                    label: "価格",
                     align: "right",
                     render: (r) => formatNumber(r.price, 1),
                 },
                 {
                     key: "total",
-                    label: "Total",
+                    label: "合計",
                     align: "right",
                     render: (r) => formatNumber(r.price * r.quantity),
                 },

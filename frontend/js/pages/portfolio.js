@@ -3,28 +3,28 @@ import { renderTable, formatNumber, colorBySign } from "../components/table.js";
 
 export async function renderPortfolio(container) {
     container.innerHTML = `
-        <h2 style="margin-bottom: 1rem;">Portfolio</h2>
+        <h2 style="margin-bottom: 1rem;">ポートフォリオ</h2>
 
         <div class="card mb-1">
-            <div class="card-title">Holdings</div>
+            <div class="card-title">保有銘柄</div>
             <div id="port-holdings">
-                <div class="loading">Loading...</div>
+                <div class="loading">読み込み中...</div>
             </div>
         </div>
 
         <div class="grid grid-2 mb-1">
             <div class="card">
-                <div class="card-title">Sector Allocation</div>
+                <div class="card-title">セクター配分</div>
                 <div id="port-sector"></div>
             </div>
             <div class="card">
-                <div class="card-title">Market Allocation</div>
+                <div class="card-title">市場配分</div>
                 <div id="port-market"></div>
             </div>
         </div>
 
         <div class="card">
-            <div class="card-title">Correlation Matrix</div>
+            <div class="card-title">相関行列</div>
             <div id="port-correlation"></div>
         </div>
     `;
@@ -38,7 +38,7 @@ async function loadHoldings() {
         const data = await api.getPortfolio();
 
         if (data.holdings.length === 0) {
-            el.innerHTML = `<div class="empty-state">No holdings. Buy stocks from the Trading page.</div>`;
+            el.innerHTML = `<div class="empty-state">保有銘柄がありません。取引画面から購入してください。</div>`;
             return;
         }
 
@@ -46,27 +46,27 @@ async function loadHoldings() {
             columns: [
                 {
                     key: "symbol",
-                    label: "Symbol",
+                    label: "コード",
                     render: (r) =>
                         `<a href="#/stock/${r.market}/${r.symbol}" class="stock-link">${r.symbol}</a>`,
                 },
-                { key: "name", label: "Name" },
-                { key: "quantity", label: "Qty", align: "right" },
+                { key: "name", label: "銘柄名" },
+                { key: "quantity", label: "数量", align: "right" },
                 {
                     key: "avg_cost",
-                    label: "Avg Cost",
+                    label: "平均取得単価",
                     align: "right",
                     render: (r) => formatNumber(r.avg_cost, 1),
                 },
                 {
                     key: "current_price",
-                    label: "Current",
+                    label: "現在価格",
                     align: "right",
                     render: (r) => r.current_price != null ? formatNumber(r.current_price, 1) : "-",
                 },
                 {
                     key: "unrealized_pnl",
-                    label: "Unrealized P&L",
+                    label: "含み損益",
                     align: "right",
                     render: (r) =>
                         r.unrealized_pnl != null
@@ -77,10 +77,9 @@ async function loadHoldings() {
             rows: data.holdings,
         });
 
-        // Total
         const totalEl = document.createElement("div");
         totalEl.style.cssText = "text-align:right; padding:0.5rem 0.75rem; font-weight:600;";
-        totalEl.innerHTML = `Total: ${colorBySign(
+        totalEl.innerHTML = `含み損益合計: ${colorBySign(
             data.total_unrealized_pnl,
             formatNumber(data.total_unrealized_pnl)
         )}`;
@@ -95,18 +94,17 @@ async function loadAllocation() {
     const marketEl = document.getElementById("port-market");
     try {
         const data = await api.getAllocation();
-
         renderAllocationBars(sectorEl, data.by_sector);
         renderAllocationBars(marketEl, data.by_market);
     } catch (e) {
-        sectorEl.innerHTML = `<div class="text-muted">No data</div>`;
-        marketEl.innerHTML = `<div class="text-muted">No data</div>`;
+        sectorEl.innerHTML = `<div class="text-muted">データなし</div>`;
+        marketEl.innerHTML = `<div class="text-muted">データなし</div>`;
     }
 }
 
 function renderAllocationBars(container, items) {
     if (!items || items.length === 0) {
-        container.innerHTML = `<div class="empty-state">No holdings</div>`;
+        container.innerHTML = `<div class="empty-state">保有銘柄なし</div>`;
         return;
     }
 
@@ -136,7 +134,7 @@ async function loadCorrelation() {
         const data = await api.getCorrelation();
 
         if (!data.matrix || data.matrix.length === 0) {
-            el.innerHTML = `<div class="empty-state">Need 2+ holdings for correlation analysis.</div>`;
+            el.innerHTML = `<div class="empty-state">相関分析には2銘柄以上の保有が必要です。</div>`;
             return;
         }
 
@@ -163,12 +161,11 @@ async function loadCorrelation() {
         html += "</table>";
         el.innerHTML = html;
     } catch (e) {
-        el.innerHTML = `<div class="text-muted">No data</div>`;
+        el.innerHTML = `<div class="text-muted">データなし</div>`;
     }
 }
 
 function correlationColor(val) {
-    // -1 → red, 0 → neutral, +1 → green
     if (val >= 0) {
         const intensity = Math.min(val, 1) * 0.4;
         return `rgba(34, 197, 94, ${intensity})`;
