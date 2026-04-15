@@ -3,6 +3,7 @@ import { renderStockDetail } from "./pages/stock-detail.js";
 import { renderTrading } from "./pages/trading.js";
 import { renderPortfolio } from "./pages/portfolio.js";
 import { renderScreening } from "./pages/screening.js";
+import { renderAutoTrade } from "./pages/auto-trade.js";
 import { renderHelp } from "./pages/help.js";
 
 const appEl = document.getElementById("app");
@@ -43,6 +44,10 @@ async function route() {
             case "#/screening":
                 updateActiveNav("screening");
                 await renderScreening(appEl);
+                break;
+            case "#/auto-trade":
+                updateActiveNav("auto-trade");
+                await renderAutoTrade(appEl);
                 break;
             case "#/help":
                 updateActiveNav("help");

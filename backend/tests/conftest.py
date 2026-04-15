@@ -51,7 +51,7 @@ def app_client(test_db, monkeypatch):
     from fastapi.testclient import TestClient
     from main import app, scheduler
     from providers.jquants import JQuantsProvider
-    from routers import stocks, collection
+    from routers import stocks, collection, auto_trade
 
     # スケジューラーをテスト時に無効化
     monkeypatch.setattr(scheduler, "start", lambda: None)
@@ -60,6 +60,7 @@ def app_client(test_db, monkeypatch):
     providers = {"JP": JQuantsProvider()}
     stocks.set_providers(providers)
     collection.set_providers(providers)
+    auto_trade.set_providers(providers)
 
     with TestClient(app) as client:
         yield client

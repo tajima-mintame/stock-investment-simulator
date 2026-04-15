@@ -96,6 +96,19 @@ export const api = {
         return request(`/screening${qs ? "?" + qs : ""}`);
     },
 
+    // Auto Trade
+    autoTradeSetup(count = 20) {
+        return request(`/auto-trade/setup?count=${count}`, { method: "POST" });
+    },
+
+    autoTradeRun() {
+        return request("/auto-trade/run", { method: "POST" });
+    },
+
+    autoTradeResults() {
+        return request("/auto-trade/results");
+    },
+
     // Collection
     getCollectionStatus(limit = 10) {
         return request(`/collection/status?limit=${limit}`);

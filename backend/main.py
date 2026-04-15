@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from config import FRONTEND_DIR
 from database import init_db
 from providers.jquants import JQuantsProvider
-from routers import stocks, trades, portfolio, screening, collection
+from routers import stocks, trades, portfolio, screening, collection, auto_trade
 from tasks.collector import collect_all
 
 logging.basicConfig(
@@ -33,6 +33,7 @@ async def lifespan(app: FastAPI):
     }
     stocks.set_providers(providers)
     collection.set_providers(providers)
+    auto_trade.set_providers(providers)
     logger.info("Providers initialized: JP (J-Quants)")
 
     # スケジューラー起動: 平日16:00 JST にデータ収集
@@ -65,6 +66,7 @@ app.include_router(trades.router)
 app.include_router(portfolio.router)
 app.include_router(screening.router)
 app.include_router(collection.router)
+app.include_router(auto_trade.router)
 
 
 # ヘルスチェック
