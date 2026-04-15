@@ -1,6 +1,5 @@
 import { api } from "../api.js";
 import { renderTable, formatNumber } from "../components/table.js";
-import { createMiniChart } from "../components/chart.js";
 
 export async function renderDashboard(container) {
     container.innerHTML = `
@@ -42,21 +41,27 @@ export async function renderDashboard(container) {
             <div id="sync-message"></div>
         </div>
 
+        <div class="card mb-1">
+            <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+                <span>Collection Status</span>
+                <button id="collect-btn" class="btn-primary" style="font-size:0.75rem; padding:0.3rem 0.6rem;">Run Now</button>
+            </div>
+            <div id="collection-status"></div>
+        </div>
+
         <div class="card">
             <div class="card-title">Registered Stocks</div>
             <div id="stock-list"></div>
         </div>
     `;
 
-    // Set default "to" date to today
     const toInput = document.getElementById("sync-to");
     toInput.value = new Date().toISOString().slice(0, 10);
 
-    // Sync button handler
     document.getElementById("sync-btn").addEventListener("click", handleSync);
+    document.getElementById("collect-btn").addEventListener("click", handleCollect);
 
-    // Load account summary and stock list
-    await Promise.all([loadAccountSummary(), loadStockList()]);
+    await Promise.all([loadAccountSummary(), loadStockList(), loadCollectionStatus()]);
 }
 
 async function handleSync() {
@@ -88,6 +93,25 @@ async function handleSync() {
     }
 }
 
+async function handleCollect() {
+    const btn = document.getElementById("collect-btn");
+    btn.disabled = true;
+    btn.textContent = "Collecting...";
+    try {
+        const result = await api.runCollection();
+        await loadCollectionStatus();
+        const msg = `Collected: ${result.collected}, Errors: ${result.errors}`;
+        document.getElementById("sync-message").innerHTML =
+            `<div class="message ${result.errors ? "message-error" : "message-success"}">${msg}</div>`;
+    } catch (e) {
+        document.getElementById("sync-message").innerHTML =
+            `<div class="message message-error">${e.message}</div>`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Run Now";
+    }
+}
+
 async function loadAccountSummary() {
     try {
         const info = await api.getAccount();
@@ -95,7 +119,33 @@ async function loadAccountSummary() {
         document.getElementById("dash-portfolio").textContent = formatNumber(info.portfolio_value);
         document.getElementById("dash-total").textContent = formatNumber(info.total_value);
     } catch (e) {
-        // Account not loaded — leave defaults
+        // leave defaults
+    }
+}
+
+async function loadCollectionStatus() {
+    const el = document.getElementById("collection-status");
+    try {
+        const logs = await api.getCollectionStatus(5);
+        if (logs.length === 0) {
+            el.innerHTML = `<div class="text-muted" style="font-size:0.85rem;">No collection logs yet. Add stocks and set them as watched.</div>`;
+            return;
+        }
+        let html = '<table style="font-size:0.85rem;">';
+        html += "<tr><th>Time</th><th>Symbol</th><th>Status</th><th>Message</th></tr>";
+        for (const log of logs) {
+            const statusCls = log.status === "OK" ? "text-green" : "text-red";
+            html += `<tr>
+                <td>${log.fetched_at.slice(0, 16).replace("T", " ")}</td>
+                <td>${log.symbol || "ALL"}</td>
+                <td class="${statusCls}">${log.status}</td>
+                <td class="text-muted">${log.message || ""}</td>
+            </tr>`;
+        }
+        html += "</table>";
+        el.innerHTML = html;
+    } catch (e) {
+        el.innerHTML = `<div class="text-muted">Failed to load status</div>`;
     }
 }
 

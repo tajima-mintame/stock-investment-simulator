@@ -96,6 +96,19 @@ export const api = {
         return request(`/screening${qs ? "?" + qs : ""}`);
     },
 
+    // Collection
+    getCollectionStatus(limit = 10) {
+        return request(`/collection/status?limit=${limit}`);
+    },
+
+    runCollection() {
+        return request("/collection/run", { method: "POST" });
+    },
+
+    toggleWatch(market, symbol) {
+        return request(`/collection/watch/${market}/${symbol}`, { method: "POST" });
+    },
+
     // Health
     health() {
         return request("/health");

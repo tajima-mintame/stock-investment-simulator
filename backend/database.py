@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS stocks (
     name        TEXT,
     sector      TEXT,
     currency    TEXT DEFAULT 'JPY',
+    watched     INTEGER DEFAULT 0,
     updated_at  TEXT,
     PRIMARY KEY (symbol, market)
 );

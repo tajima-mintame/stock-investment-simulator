@@ -46,14 +46,20 @@ def seed_stock(test_db):
 
 
 @pytest.fixture
-def app_client(test_db):
-    """FastAPI TestClient を返す。"""
+def app_client(test_db, monkeypatch):
+    """FastAPI TestClient を返す。テスト時はスケジューラーを無効化。"""
     from fastapi.testclient import TestClient
-    from main import app
+    from main import app, scheduler
     from providers.jquants import JQuantsProvider
-    from routers import stocks
+    from routers import stocks, collection
 
-    stocks.set_providers({"JP": JQuantsProvider()})
+    # スケジューラーをテスト時に無効化
+    monkeypatch.setattr(scheduler, "start", lambda: None)
+    monkeypatch.setattr(scheduler, "shutdown", lambda **kw: None)
+
+    providers = {"JP": JQuantsProvider()}
+    stocks.set_providers(providers)
+    collection.set_providers(providers)
 
     with TestClient(app) as client:
         yield client
