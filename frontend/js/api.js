@@ -105,6 +105,10 @@ export const api = {
         return request("/auto-trade/run", { method: "POST" });
     },
 
+    autoTradeStart(count = 20) {
+        return request(`/auto-trade/start?count=${count}`, { method: "POST" });
+    },
+
     autoTradeResults() {
         return request("/auto-trade/results");
     },

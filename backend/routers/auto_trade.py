@@ -22,11 +22,25 @@ async def setup(count: int = Query(20)) -> dict:
 
 @router.post("/run")
 async def run() -> dict:
-    """全登録銘柄に対してMA/RSI戦略を実行する。"""
+    """全登録銘柄に対してスコアリング戦略を実行する。"""
     return run_strategy()
+
+
+@router.post("/start")
+async def start(count: int = Query(20)) -> dict:
+    """ワンクリック運用開始: セットアップ→戦略実行を一括で行う。"""
+    provider = _providers.get("JP")
+    if provider is None:
+        return {"error": "JP provider not available"}
+    setup_result = await setup_stocks(provider, count=count)
+    run_result = run_strategy()
+    return {
+        "setup": setup_result,
+        "run": run_result,
+    }
 
 
 @router.get("/results")
 async def results() -> dict:
-    """自動売買の結果を取得する。"""
+    """自動売買の結果（資産推移含む）を取得する。"""
     return get_auto_trade_results()

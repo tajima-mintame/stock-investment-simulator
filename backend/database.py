@@ -61,6 +61,14 @@ CREATE TABLE IF NOT EXISTS account (
     created_at      TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS asset_snapshots (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp   TEXT NOT NULL,
+    cash        REAL NOT NULL,
+    portfolio   REAL NOT NULL,
+    total       REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS collection_log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     market      TEXT NOT NULL,
