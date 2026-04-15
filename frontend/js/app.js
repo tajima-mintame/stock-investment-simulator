@@ -3,6 +3,7 @@ import { renderStockDetail } from "./pages/stock-detail.js";
 import { renderTrading } from "./pages/trading.js";
 import { renderPortfolio } from "./pages/portfolio.js";
 import { renderScreening } from "./pages/screening.js";
+import { renderHelp } from "./pages/help.js";
 
 const appEl = document.getElementById("app");
 
@@ -14,7 +15,7 @@ function updateActiveNav(page) {
 
 async function route() {
     const hash = location.hash || "#/";
-    appEl.innerHTML = `<div class="loading">Loading...</div>`;
+    appEl.innerHTML = `<div class="loading">読み込み中...</div>`;
 
     try {
         // #/stock/{market}/{symbol}
@@ -42,6 +43,10 @@ async function route() {
             case "#/screening":
                 updateActiveNav("screening");
                 await renderScreening(appEl);
+                break;
+            case "#/help":
+                updateActiveNav("help");
+                await renderHelp(appEl);
                 break;
             default:
                 updateActiveNav("dashboard");

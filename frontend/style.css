@@ -210,6 +210,13 @@ tr:hover td {
 .text-green { color: var(--green); }
 .text-red { color: var(--red); }
 .text-muted { color: var(--text-muted); }
+code {
+    background: var(--bg-input);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85em;
+}
+
 .text-right { text-align: right; }
 .mt-1 { margin-top: 1rem; }
 .mb-1 { margin-bottom: 1rem; }
