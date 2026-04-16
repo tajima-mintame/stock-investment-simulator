@@ -28,7 +28,8 @@ async def setup_stocks(provider, count: int = 20) -> dict:
         stock_list = await asyncio.to_thread(provider._get_client().get_list)
     except Exception as e:
         logger.exception("Failed to fetch stock list")
-        return {"registered": 0, "errors": 1, "message": f"銘柄リスト取得失敗: {e}"}
+        msg = "APIのレート制限に達しました。数分後に再度お試しください。" if "429" in str(e) else f"銘柄リスト取得失敗: {e}"
+        return {"registered": 0, "errors": 1, "message": msg}
 
     # 流動性の低い市場を除外
     stock_list = stock_list[~stock_list["MktNm"].isin(["TOKYO PRO MARKET", "その他"])]
