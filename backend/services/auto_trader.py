@@ -24,7 +24,11 @@ MAX_POSITION_RATIO = 0.20  # 1銘柄あたり残高の20%まで
 
 async def setup_stocks(provider, count: int = 20) -> dict:
     """出来高上位の銘柄を自動選定・登録・同期する。"""
-    stock_list = await asyncio.to_thread(provider._get_client().get_list)
+    try:
+        stock_list = await asyncio.to_thread(provider._get_client().get_list)
+    except Exception as e:
+        logger.exception("Failed to fetch stock list")
+        return {"registered": 0, "errors": 1, "message": f"銘柄リスト取得失敗: {e}"}
 
     # 流動性の低い市場を除外
     stock_list = stock_list[~stock_list["MktNm"].isin(["TOKYO PRO MARKET", "その他"])]
@@ -61,7 +65,8 @@ async def setup_stocks(provider, count: int = 20) -> dict:
                 )
                 conn.commit()
 
-            await asyncio.sleep(0.5)
+            # レート制限対策: 各APIコール間に十分な待機
+            await asyncio.sleep(1.0)
             prices = await provider.get_daily_prices(symbol, start, end)
 
             if len(prices) < 30:
@@ -79,7 +84,7 @@ async def setup_stocks(provider, count: int = 20) -> dict:
                 conn.commit()
 
             # ファンダメンタルデータも取得
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(1.0)
             try:
                 jq_code = row["Code"]
                 fin_df = await asyncio.to_thread(
@@ -97,6 +102,8 @@ async def setup_stocks(provider, count: int = 20) -> dict:
         except Exception:
             errors += 1
             logger.exception("Failed to register %s", symbol)
+            # レート制限エラーの場合、追加で待機
+            await asyncio.sleep(3.0)
 
     return {"registered": registered, "errors": errors}
 

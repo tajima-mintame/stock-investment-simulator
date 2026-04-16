@@ -66,12 +66,16 @@ async function handleStart() {
 
     try {
         const result = await api.autoTradeStart(count);
-        const s = result.setup;
-        const r = result.run;
-        msgEl.innerHTML = `<div class="message message-success">
-            ${s.registered}銘柄登録 → 買い${r.buys}件 / 売り${r.sells}件 / 様子見${r.skipped}件
-        </div>`;
-        showDetails(r.details);
+        const s = result.setup || {};
+        const r = result.run || {};
+        if (s.message && s.errors > 0) {
+            msgEl.innerHTML = `<div class="message message-error">${s.message}</div>`;
+        } else {
+            msgEl.innerHTML = `<div class="message message-success">
+                ${s.registered || 0}銘柄登録 → 買い${r.buys || 0}件 / 売り${r.sells || 0}件 / 様子見${r.skipped || 0}件
+            </div>`;
+        }
+        if (r.details) showDetails(r.details);
         await loadResults();
     } catch (e) {
         msgEl.innerHTML = `<div class="message message-error">${e.message}</div>`;
